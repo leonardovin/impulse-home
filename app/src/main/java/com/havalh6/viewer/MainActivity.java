@@ -2849,10 +2849,10 @@ public final class MainActivity extends Activity {
          * days on the right; cabin INTERNA bottom-right. Hint is unused.
          *
          * Type scale (keep INTERNA in sync with sibling rail cards):
-         *   setpoint   h·0.48  (frac ",0" at 50%; ° stays full size)
+         *   setpoint   h·0.48  (frac ".0" at 50%; ° stays full size)
          *               off → driver setpoint, muted
          *   forecast   day h·0.135 / icon fits label→temp band / temp h·0.185 (today) / h·0.16
-         *   INTERNA    h·0.18
+         *   INTERNA    label h·0.11 light; cabin temp stays h·0.18
          */
         private void drawClimate(android.graphics.Canvas c, float w, float h,
                 int accent, int muted, int strong) {
@@ -2952,23 +2952,34 @@ public final class MainActivity extends Activity {
                 right -= colW;
             }
 
-            paint.setTypeface(android.graphics.Typeface.DEFAULT);
-            String inside = descriptor.insideText == null || descriptor.insideText.isEmpty()
-                    ? "" : "INTERNA " + descriptor.insideText;
+            String inside = descriptor.insideText == null ? "" : descriptor.insideText;
             if (!inside.isEmpty()) {
                 paint.setTextAlign(android.graphics.Paint.Align.RIGHT);
-                // Shared rail meta size — reuse for sibling cards that label a cabin reading.
-                paint.setTextSize(Math.max(11f, h * .18f));
+                paint.setTypeface(android.graphics.Typeface.DEFAULT);
+                float numSize = Math.max(11f, h * .18f);
+                paint.setTextSize(numSize);
                 fill(unknown ? muted : strong);
-                c.drawText(inside, w - pad, bottomY, paint);
+                float right = w - pad;
+                c.drawText(inside, right, bottomY, paint);
+                float numW = paint.measureText(inside);
+                android.graphics.Paint.FontMetrics numFm = paint.getFontMetrics();
+                paint.setTypeface(android.graphics.Typeface.create("sans-serif-light",
+                        android.graphics.Typeface.NORMAL));
+                paint.setTextSize(Math.max(8f, h * .11f));
+                android.graphics.Paint.FontMetrics labFm = paint.getFontMetrics();
+                float numMid = bottomY + (numFm.ascent + numFm.descent) / 2f;
+                float labelBaseline = numMid - (labFm.ascent + labFm.descent) / 2f;
+                float gap = Math.max(3f, numSize * .14f);
+                c.drawText("INTERNA", right - numW - gap, labelBaseline, paint);
             }
         }
 
-        /** Big climate setpoint: integer full size, ",0" at half, ° full; OFF/— unchanged. */
+        /** Big climate setpoint: integer full size, ".0" at half, ° full; OFF/— unchanged. */
         private void drawClimateSetpoint(android.graphics.Canvas c, String driver,
                 float x, float y, float fullSize, int color) {
             fill(color);
-            int comma = driver.indexOf(',');
+            int comma = driver.indexOf('.');
+            if (comma < 0) comma = driver.indexOf(',');
             if (comma <= 0 || "OFF".equalsIgnoreCase(driver) || "—".equals(driver)) {
                 paint.setTextSize(fullSize);
                 c.drawText(driver, x, y, paint);
