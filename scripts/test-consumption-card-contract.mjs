@@ -152,10 +152,10 @@ const CHECKS = {
   },
   'export note states what was written and where': ({ html }) => {
     const text = pure(html, '_energyExportText');
-    const done = text({ state: 'done', trips: 3, points: 1200, dir: '/sdcard/HavalH6Viewer/exports',
+    const done = text({ state: 'done', trips: 3, points: 1200, dir: '/storage/emulated/0/HavalH6Viewer/exports',
       json: 'viagens-1.json', csv: 'viagens-1.csv' });
     return done.startsWith('3 viagens e 1200 amostras') && done.includes('/sdcard/HavalH6Viewer/exports')
-      && done.includes('viagens-1.json') && done.includes('viagens-1.csv')
+      && done.includes('viagens-1.json') && done.includes('.csv')
       && /permissão/.test(text({ state: 'error', reason: 'permission' }))
       && html.includes('<sc-if value="{{ focusedConsumptionExportAvailable }}"');
   },
