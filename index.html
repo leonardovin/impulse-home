@@ -11255,7 +11255,6 @@ class Component extends DCLogic {
     this._wireCarTelemetry();
     this._graphV = 0;
     this._graphI = 0;
-    this._graphNow = 0;
     this._graphAnyLive = false;
     this._graphLiveKeys = {};
     this._graphValues = {};
@@ -14041,12 +14040,6 @@ class Component extends DCLogic {
   }
 
   _drawGraphs(now) {
-    // Sample every frame so the series keeps moving; paint can stay cheaper.
-    this._graphNow = now;
-    this._graphDeriveConsumption(now);
-    this._graphSmooth('evPowerKw', now);
-    this._graphSmooth('evInst', now);
-    if (this._graphLiveKeys.fuelInst) this._graphSmooth('fuelInst', now);
     // The power card is text and a keyed SVG, fed by a bus that moves a few
     // times a second: it has nothing to show at 60 Hz. Its animation is CSS
     // and runs on its own. Event-driven refreshes (_commitPowerRefresh, the
@@ -14063,6 +14056,12 @@ class Component extends DCLogic {
     }
     const canvases = this._graphCanvasCache;
     if (!canvases || !canvases.length) return;
+    // Only a graph canvas reads the series. While one is mounted, sample every
+    // frame (the EMA and the 40 ms bucket are tuned to it); paint stays cheaper.
+    this._graphDeriveConsumption(now);
+    this._graphSmooth('evPowerKw', now);
+    this._graphSmooth('evInst', now);
+    if (this._graphLiveKeys.fuelInst) this._graphSmooth('fuelInst', now);
 
     const item = this._graphActiveItem();
     if (!item) return;
@@ -49735,8 +49734,7 @@ class Component extends DCLogic {
       !appsOnly
       && !this.state.loading
       && (this._hasWidgetType(mode, 'graphs')
-        || this._hasWidgetType(mode, 'power')
-        || this._hasWidgetType(mode, 'range')),
+        || this._hasWidgetType(mode, 'power')),
     );
     const editor = appsOnly ? {
       graphEditorDisplay: 'none',
