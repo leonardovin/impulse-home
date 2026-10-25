@@ -7,18 +7,24 @@ package com.havalh6.viewer;
  */
 final class TelemetryBatch {
     private final StringBuilder calls = new StringBuilder();
+    private boolean flushPending;
     private static final String HEX = "0123456789abcdef";
 
-    void add(String key, String value) {
+    /** Only the first arrival posts work; later arrivals share that pending flush. */
+    boolean add(String key, String value) {
+        boolean postFlush = !flushPending;
+        flushPending = true;
         calls.append("window.onCarDataUpdate(");
         appendLiteral(key);
         calls.append(',');
         appendLiteral(value);
         calls.append(");");
+        return postFlush;
     }
 
     /** Empty drains do not schedule any renderer work; each call is sent once. */
     String drain() {
+        flushPending = false;
         if (calls.length() == 0) return null;
         String script = "if(window.onCarDataUpdate){" + calls + "}";
         calls.setLength(0);

@@ -234,9 +234,7 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> pendingFiles;
     private final ConcurrentHashMap<String, String> telemetryCache = new ConcurrentHashMap<>();
     private final TelemetryBatch telemetryBatch = new TelemetryBatch();
-    private boolean telemetryFlushPosted;
     private final Runnable telemetryFlush = () -> {
-        telemetryFlushPosted = false;
         String script = telemetryBatch.drain();
         if (script != null && webView != null) webView.evaluateJavascript(script, null);
     };
@@ -308,9 +306,7 @@ public final class MainActivity extends Activity {
                 // before this flush runs, now reaches the page before X.
                 // mainHandler rather than webView.post: same FIFO queue while attached,
                 // and a detached view's run queue cannot strand the flag.
-                telemetryBatch.add(key, value);
-                if (!telemetryFlushPosted) {
-                    telemetryFlushPosted = true;
+                if (telemetryBatch.add(key, value)) {
                     mainHandler.post(telemetryFlush);
                 }
             }
@@ -7334,10 +7330,10 @@ public final class MainActivity extends Activity {
         placeGlance = new PlaceGlance(this, mainHandler, json -> {
             telemetryCache.put(PlaceGlance.KEY, json);
             if (webView == null) return;
-            webView.evaluateJavascript(
-                    String.format("if(window.onCarDataUpdate){window.onCarDataUpdate('%s','%s');}",
-                            PlaceGlance.KEY.replace("'", "\\'"), json.replace("'", "\\'")),
-                    null);
+            // Share escaping and arrival order with broadcasts already awaiting a flush.
+            if (telemetryBatch.add(PlaceGlance.KEY, json)) {
+                mainHandler.post(telemetryFlush);
+            }
         });
         placeGlance.start();
 
@@ -15282,6 +15278,9 @@ public final class MainActivity extends Activity {
             unregisterReceiver(packageRemovedReceiver);
         } catch (Exception ignored) {}
         if (pendingFiles != null) pendingFiles.onReceiveValue(null);
+        // No queued renderer work may outlive the WebView; discard and reset the batch.
+        mainHandler.removeCallbacks(telemetryFlush);
+        telemetryBatch.drain();
         webView.stopLoading();
         webView.setWebChromeClient(null);
         webView.setWebViewClient(null);
