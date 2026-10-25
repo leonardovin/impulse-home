@@ -1896,6 +1896,7 @@ window.HavalSplash = (function () {
             <section>
               <p class="hv-energy-zlabel">EXPORTAR VIAGENS</p>
               <div class="hv-energy-seg hv-energy-setone"><button type="button" class="{{ focusedConsumptionExportClass }}" onClick="{{ focusedConsumptionExportStart }}">{{ focusedConsumptionExportLabel }}</button></div>
+              <sc-if value="{{ focusedConsumptionExportCanSend }}" hint-placeholder-val="{{ false }}"><div class="hv-energy-seg hv-energy-setone"><button type="button" onClick="{{ focusedConsumptionExportSend }}">ENVIAR POR BLUETOOTH</button></div></sc-if>
               <small class="hv-energy-setnote">{{ focusedConsumptionExportNote }}</small>
             </section>
             </sc-if>
@@ -10867,6 +10868,7 @@ class Component extends DCLogic {
     energyFinishConfirm: false,
     // EXPORTAR VIAGENS: the last TripBridge.getExportStatus() the page has read.
     energyExport: null,
+    energyExportSent: null,
     energyMapMax: false,
     energyTripView: 'map',
     energyHistoryView: 'chart',
@@ -43620,12 +43622,22 @@ class Component extends DCLogic {
   }
 
   _energyExportNote() {
-    return this._energyExportText(this._energyExportState());
+    return this._energyExportText(this._energyExportState(), this.state.energyExportSent);
   }
 
-  /** Pure: the note under EXPORTAR TUDO for a TripBridge.getExportStatus() object. */
-  _energyExportText(st) {
+  /**
+   * Pure: the note under EXPORTAR TUDO for a TripBridge.getExportStatus() object
+   * and the outcome of the last ENVIAR POR BLUETOOTH ('ok' / 'error' / none).
+   */
+  _energyExportText(st, sent) {
     const s = st || {};
+    if (s.state === 'done' && sent === 'ok') {
+      return 'Escolha o celular na lista do Bluetooth e aceite o arquivo nele (' + s.zip + '). '
+        + 'O celular precisa estar com o Bluetooth ligado; iPhone não recebe arquivos por Bluetooth.';
+    }
+    if (s.state === 'done' && sent === 'error') {
+      return 'Não foi possível abrir o envio por Bluetooth. Os arquivos continuam em ' + s.dir + '.';
+    }
     if (s.state === 'running') return 'Exportando… pode levar alguns segundos com muitas viagens.';
     if (s.state === 'done') {
       const trips = Number(s.trips) || 0;
@@ -43652,7 +43664,7 @@ class Component extends DCLogic {
     const read = (raw) => { try { return JSON.parse(raw) || { state: 'error' }; } catch (e) { return { state: 'error' }; } };
     let st;
     try { st = read(b.exportTrips()); } catch (e) { st = { state: 'error' }; }
-    this._uiOnlySetState({ energyExport: st });
+    this._uiOnlySetState({ energyExport: st, energyExportSent: null });
     const poll = () => {
       this._energyExportTimer = 0;
       if (this._unmounted) return;
@@ -43662,6 +43674,22 @@ class Component extends DCLogic {
       this._uiOnlySetState({ energyExport: next });
     };
     if (st.state === 'running') this._energyExportTimer = setTimeout(poll, 1000);
+  }
+
+  /** The recorder said, when the export finished, whether this head unit has a Bluetooth file share. */
+  _energyExportCanSend() {
+    const st = this._energyExportState();
+    const b = this._energyExportBridge();
+    return st.state === 'done' && st.bluetooth === true && !!st.zip && !!b && typeof b.sendExportBluetooth === 'function';
+  }
+
+  /** ENVIAR POR BLUETOOTH: the system's device picker takes over; the files stay on the head unit either way. */
+  _sendEnergyExportBluetooth(ev) {
+    this._cardControlEvent(ev);
+    if (!this._energyExportCanSend()) return;
+    let ok = false;
+    try { ok = this._energyExportBridge().sendExportBluetooth(String(this._energyExportState().zip)) === true; } catch (e) { ok = false; }
+    this._uiOnlySetState({ energyExportSent: ok ? 'ok' : 'error' });
   }
 
   /** Every refuel and charge the recorder knows (demo: a priced pair). Merges duplicates from same session. */
@@ -44418,6 +44446,8 @@ class Component extends DCLogic {
       consumptionExportLabel: this._energyExportState().state === 'running' ? 'EXPORTANDO…' : 'EXPORTAR TUDO',
       consumptionExportNote: this._energyExportNote(),
       consumptionExportStart: (ev) => this._startEnergyExport(ev),
+      consumptionExportCanSend: this._energyExportCanSend(),
+      consumptionExportSend: (ev) => this._sendEnergyExportBluetooth(ev),
       consumptionMapMaxClose: (ev) => this._setEnergyMapMax(false, ev),
       consumptionHaltsClass: on(this._energyShowHalts()),
       consumptionHaltsToggle: (ev) => this._toggleEnergyHalts(ev),

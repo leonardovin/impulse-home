@@ -58,6 +58,13 @@
                 android:name="moe.shizuku.client.V3_SUPPORT"
                 android:value="true" />
         </provider>
+        <!-- ENVIAR POR BLUETOOTH: serves trip-export zips, read-only, only to the
+             Bluetooth share it is granted to (TripExportProvider). -->
+        <provider
+            android:name=".TripExportProvider"
+            android:authorities="${applicationId}.tripexport"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"

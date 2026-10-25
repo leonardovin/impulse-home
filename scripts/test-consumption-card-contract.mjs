@@ -20,6 +20,8 @@ const SOURCE = {
   renderer: read('app/src/main/java/com/havalh6/viewer/TripMapRenderer.java'),
   store: read('app/src/main/java/com/havalh6/viewer/TripStore.java'),
   recorder: read('app/src/main/java/com/havalh6/viewer/TripRecorder.java'),
+  provider: read('app/src/main/java/com/havalh6/viewer/TripExportProvider.java'),
+  manifest: read('app/src/main/AndroidManifest.xml'),
 };
 
 function method(text, name) {
@@ -157,6 +159,23 @@ const CHECKS = {
       && /permissão/.test(text({ state: 'error', reason: 'permission' }))
       && html.includes('<sc-if value="{{ focusedConsumptionExportAvailable }}"');
   },
+  // ENVIAR POR BLUETOOTH: the provider is the only door to shared storage it
+  // opens, so it serves export zips by bare name, read-only, to granted callers only.
+  'export provider serves only export zips, read-only': ({ provider, manifest }) => {
+    const resolve = javaMethod(provider, 'private static File resolve(') || '';
+    const open = javaMethod(provider, 'public ParcelFileDescriptor openFile(') || '';
+    const entry = (manifest.match(/<provider\s+android:name="\.TripExportProvider"[^>]*>/) || [''])[0];
+    return resolve.includes('!TripExport.isZipName(name)') && resolve.includes('uri.getPathSegments().size() != 1')
+      && open.includes('if (!"r".equals(mode)) throw') && open.includes('MODE_READ_ONLY')
+      && entry.includes('android:exported="false"') && entry.includes('android:grantUriPermissions="true"');
+  },
+  // The send button appears only where the recorder found a Bluetooth share,
+  // and the page never asks the package manager while it renders.
+  'bluetooth send only where the head unit has it': ({ html, recorder }) =>
+    /o\.put\("bluetooth", TripExportProvider\.bluetoothTarget\(app\) != null\);/.test(javaMethod(recorder, 'private void runExport(') || '')
+    && (method(html, '_energyExportCanSend') || '').includes("st.bluetooth === true")
+    && html.includes('<sc-if value="{{ focusedConsumptionExportCanSend }}"')
+    && !/bluetoothTarget|sendExportBluetooth/.test(method(html, '_consumptionWidgetView') || ''),
 };
 
 const MUTANTS = {
@@ -204,6 +223,10 @@ const MUTANTS = {
     'new java.io.FileOutputStream(jsonTmp)', 'new java.io.FileOutputStream(json)') }),
   'export note states what was written and where': (s) => ({ ...s, html: s.html.replace(
     "(trips === 1 ? '1 viagem' : trips + ' viagens')", "(trips === 1 ? '1 viagem' : points + ' viagens')") }),
+  'export provider serves only export zips, read-only': (s) => ({ ...s, provider: s.provider.replace(
+    'if (!TripExport.isZipName(name) || uri.getPathSegments().size() != 1)', 'if (name == null)') }),
+  'bluetooth send only where the head unit has it': (s) => ({ ...s, html: s.html.replace(
+    "return st.state === 'done' && st.bluetooth === true &&", "return st.state === 'done' &&") }),
 };
 
 const changed = (a, b) => Object.keys(a).some((k) => a[k] !== b[k]);

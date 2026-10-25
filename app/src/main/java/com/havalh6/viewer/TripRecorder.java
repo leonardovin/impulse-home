@@ -315,6 +315,8 @@ final class TripRecorder implements TripEngine.Listener {
         java.io.File csv = new java.io.File(dir, stem + ".csv");
         java.io.File jsonTmp = new java.io.File(dir, stem + ".json.tmp");
         java.io.File csvTmp = new java.io.File(dir, stem + ".csv.tmp");
+        java.io.File zip = new java.io.File(dir, stem + ".zip");
+        java.io.File zipTmp = new java.io.File(dir, stem + ".zip.tmp");
         try {
             if (!dir.isDirectory() && !dir.mkdirs()) throw new java.io.IOException("mkdirs " + dir);
             TripStore.ExportCount n;
@@ -328,13 +330,20 @@ final class TripRecorder implements TripEngine.Listener {
             }
             // Renamed only once complete: a half-written export never looks like one.
             if (!jsonTmp.renameTo(json) || !csvTmp.renameTo(csv)) throw new java.io.IOException("rename");
+            // Both in one zip for ENVIAR POR BLUETOOTH (TripExportProvider).
+            TripExport.zip(zipTmp, json, csv);
+            if (!zipTmp.renameTo(zip)) throw new java.io.IOException("rename zip");
             android.media.MediaScannerConnection.scanFile(app,
-                    new String[]{json.getAbsolutePath(), csv.getAbsolutePath()}, null, null);
+                    new String[]{json.getAbsolutePath(), csv.getAbsolutePath(), zip.getAbsolutePath()}, null, null);
             JSONObject o = new JSONObject();
             o.put("state", "done");
             o.put("dir", dir.getAbsolutePath());
             o.put("json", json.getName());
             o.put("csv", csv.getName());
+            o.put("zip", zip.getName());
+            o.put("zipBytes", zip.length());
+            // Asked once here, so the page never queries the package manager while it renders.
+            o.put("bluetooth", TripExportProvider.bluetoothTarget(app) != null);
             o.put("trips", n.trips);
             o.put("points", n.points);
             o.put("stops", n.stops);
@@ -346,8 +355,13 @@ final class TripRecorder implements TripEngine.Listener {
             Log.w(TAG, "trip export failed", e);
             jsonTmp.delete();
             csvTmp.delete();
+            zipTmp.delete();
             exportJson = exportError("write");
         }
+    }
+
+    boolean sendExportBluetooth(String zipName) {
+        return TripExportProvider.sendBluetooth(app, zipName);
     }
 
     private static String exportError(String reason) {

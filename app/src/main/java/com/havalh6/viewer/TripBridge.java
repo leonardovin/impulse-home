@@ -106,6 +106,16 @@ final class TripBridge {
         return recorder.exportStatusJson();
     }
 
+    /**
+     * ENVIAR POR BLUETOOTH: opens the system's Bluetooth device picker for an
+     * export's zip (the {@code zip} name a done status carries). False when the
+     * head unit has no Bluetooth file transfer or the file is gone.
+     */
+    @JavascriptInterface
+    public boolean sendExportBluetooth(String zipName) {
+        return recorder.sendExportBluetooth(zipName);
+    }
+
     /** FINALIZAR VIAGEM: ends the open trip; a new one starts at once if the car is still READY. */
     @JavascriptInterface
     public void finishTrip() {

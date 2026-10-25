@@ -1,14 +1,27 @@
 package com.havalh6.viewer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.zip.ZipInputStream;
 
 public class TripExportTest {
+    @Rule
+    public TemporaryFolder tmp = new TemporaryFolder();
+
     @Test
     public void numbersAreWhatASpreadsheetReads() {
         assertEquals("18", TripExport.csvField(18.0));
@@ -48,5 +61,39 @@ public class TripExportTest {
         String b = TripExport.fileStem(1_000_000_001_000L);
         assertTrue(a.matches("viagens-\\d{8}-\\d{6}"));
         assertTrue(a.compareTo(b) < 0);
+    }
+
+    @Test
+    public void theProviderServesOnlyAnExportZipByName() {
+        String stem = TripExport.fileStem(1_000_000_000_000L);
+        assertTrue(TripExport.isZipName(stem + ".zip"));
+        assertFalse(TripExport.isZipName(stem + ".json"));
+        assertFalse(TripExport.isZipName("../" + stem + ".zip"));
+        assertFalse(TripExport.isZipName("trips.db"));
+        assertFalse(TripExport.isZipName(null));
+    }
+
+    @Test
+    public void theZipCarriesBothFilesUnderTheirNames() throws Exception {
+        File json = tmp.newFile("viagens-20261025-143005.json");
+        File csv = tmp.newFile("viagens-20261025-143005.csv");
+        Files.write(json.toPath(), "{\"trips\":[]}".getBytes(StandardCharsets.UTF_8));
+        Files.write(csv.toPath(), "start,end\r\n".getBytes(StandardCharsets.UTF_8));
+        File zip = new File(tmp.getRoot(), "viagens-20261025-143005.zip");
+        TripExport.zip(zip, json, csv);
+        try (ZipInputStream in = new ZipInputStream(new FileInputStream(zip))) {
+            assertEquals(json.getName(), in.getNextEntry().getName());
+            assertEquals("{\"trips\":[]}", read(in));
+            assertEquals(csv.getName(), in.getNextEntry().getName());
+            assertEquals("start,end\r\n", read(in));
+            assertNull(in.getNextEntry());
+        }
+    }
+
+    private static String read(ZipInputStream in) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[256];
+        for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
     }
 }

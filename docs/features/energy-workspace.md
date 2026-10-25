@@ -409,6 +409,19 @@ a file manager, `adb pull`). The section only shows when `window.TripBridge` has
   leaves no file that looks finished. One export at a time. Needs the storage
   grant `PersistBackup` already asks for; without it the note says so.
 - Map snapshots are not exported: they are tiles only, and the route is in the JSON.
+- **ENVIAR POR BLUETOOTH.** Each export also writes `viagens-<stamp>.zip` with
+  both files. A phone accepts a zip over Bluetooth where it may refuse a `.json`,
+  and the JSON deflates to a fraction of its size over a slow link. Once an
+  export is done, the button hands the zip to the system's Bluetooth file
+  transfer (OPP), which shows its own device picker and asks the phone to
+  accept. The button only shows when the recorder found a Bluetooth share
+  activity when the export finished (`bluetooth` in the status), because the
+  package is OEM-specific and is matched by name. `TripExportProvider` serves
+  the zip, because targetSdk 28 forbids a `file://` URI in an intent and the app
+  has no androidx. It is read-only and not exported, serves export zips only, by
+  their bare name, and only to the caller the intent grants. iPhones do not
+  receive files over Bluetooth. **Not checked on the car**: whether the MMI ships
+  OPP at all.
 
 ## Future (optional): refuel log and fuel price
 

@@ -1,20 +1,31 @@
 package com.havalh6.viewer;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * EXPORTAR VIAGENS: the file layout of a trip export, kept pure so the JVM
  * tests can pin it. {@link TripStore#exportTrips} fills it from the database.
  *
- * <p>Two files per export, written side by side under
+ * <p>Three files per export, written side by side under
  * {@code /sdcard/HavalH6Viewer/exports} (docs/features/energy-workspace.md):
  * {@code <stem>.json} holds everything recorded (every stored trip with its raw
  * trip-computer values, kept route, all its samples while they are kept, and its
  * refuel / charge stops, plus the daily totals), and {@code <stem>.csv} one row
  * per trip for a spreadsheet. Numbers keep the dot decimal; the CSV is RFC 4180
- * (comma, CRLF, quoted when needed).
+ * (comma, CRLF, quoted when needed). {@code <stem>.zip} carries both, for
+ * ENVIAR POR BLUETOOTH (TripExportProvider): a phone takes a zip where it may
+ * refuse a .json, and the JSON deflates to a fraction of its size over a slow link.
  */
 final class TripExport {
     /** Bumped when a field changes meaning; adding a field does not bump it. */
@@ -33,7 +44,28 @@ final class TripExport {
             "guided", "arrived", "plannedKm", "plannedS", "guidedKm", "guidedS", "detailKept",
     };
 
+    private static final Pattern ZIP_NAME = Pattern.compile("viagens-\\d{8}-\\d{6}\\.zip");
+
     private TripExport() {}
+
+    /** An export zip's bare name, as fileStem makes it: what TripExportProvider may serve. */
+    static boolean isZipName(String name) {
+        return name != null && ZIP_NAME.matcher(name).matches();
+    }
+
+    /** {@code files} into {@code out}, each under its own name. */
+    static void zip(File out, File... files) throws IOException {
+        byte[] buf = new byte[64 * 1024];
+        try (ZipOutputStream z = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(out)))) {
+            for (File f : files) {
+                z.putNextEntry(new ZipEntry(f.getName()));
+                try (InputStream in = new FileInputStream(f)) {
+                    for (int n; (n = in.read(buf)) > 0; ) z.write(buf, 0, n);
+                }
+                z.closeEntry();
+            }
+        }
+    }
 
     /** {@code viagens-20261025-143005}: sorts by time, and two exports a second apart never collide. */
     static String fileStem(long nowMs) {
