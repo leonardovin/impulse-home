@@ -43931,7 +43931,7 @@ class Component extends DCLogic {
 
   /** DADOS rows grouped for display, in the order the flat list already has. */
   _energyStatGroups(rows) {
-    const names = { trip: ['VIAGEM', 'trip'], fuel: ['COMBUSTÍVEL', 'fuel'], ev: ['ELÉTRICO', 'ev'], cost: ['CUSTO', 'cost'], guide: ['ANDROID AUTO', 'guide'] };
+    const names = { trip: ['VIAGEM', 'trip'], fuel: ['COMBUSTÍVEL', 'fuel'], ev: ['ELÉTRICO', 'ev'], cost: ['CUSTO', 'cost'], guide: ['ANDROID AUTO', 'guide'], settings: ['AJUSTES', 'settings'] };
     const out = [];
     (rows || []).forEach((r) => {
       const g = names[r.g] ? r.g : 'trip';
@@ -44724,8 +44724,25 @@ class Component extends DCLogic {
         { g: 'guide', k: 'ANDROID AUTO', v: t.arrived ? 'Chegou ao destino' : 'Navegação encerrada antes' },
         { g: 'guide', k: 'PLANEJADO', v: this._energyKm(t.plannedKm) + ' · ' + this._energyDuration((t.plannedS || 0) * 1000) },
         { g: 'guide', k: 'GUIADO', v: this._energyKm(t.guidedKm) + ' · ' + this._energyDuration((t.guidedS || 0) * 1000) },
-      ] : []);
+      ] : [])
+      .concat(this._energySettingRows(detail ? detail.settingSegments : null, units));
     return rows;
+  }
+
+  /**
+   * AJUSTES (no state read): one row per stretch of the trip under one combination of
+   * drive mode, energy mode and HEV reserve (TripSetting): its distance and
+   * what it used, so a result can be put down to a setting. Nothing for a trip
+   * recorded before settings were.
+   */
+  _energySettingRows(segments, units) {
+    return (segments || []).filter((g) => Number(g.km) >= 0.05).map((g) => {
+      const fuel = Number(g.fuelL) >= 0.05 && g.kmPerL != null && isFinite(g.kmPerL)
+        ? this._energyFuelText(Number(g.kmPerL), units) + ' ' + this._energyFuelUnitLabel(units, true) : '';
+      const ev = g.kwhPer100Km != null && isFinite(g.kwhPer100Km)
+        ? this._energyEvText(Number(g.kwhPer100Km), units) + ' ' + this._energyEvUnitLabel(units, true) : '';
+      return { g: 'settings', k: g.label, v: [this._energyKm(Number(g.km)), fuel, ev].filter(Boolean).join(' · ') };
+    });
   }
 
   _energyTripsView(m, wide) {
@@ -45674,6 +45691,7 @@ class Component extends DCLogic {
     let points = [];
     let route = null;
     let stops = [];
+    let settingSegments = [];
     let view = trip.snapshotView || '';
     if (demo) {
       points = this._energyDemoPoints(trip);
@@ -45686,6 +45704,7 @@ class Component extends DCLogic {
           points = d && Array.isArray(d.points) ? d.points : [];
           route = d && Array.isArray(d.route) ? d.route : null;
           stops = d && Array.isArray(d.stops) ? d.stops : [];
+          settingSegments = d && Array.isArray(d.settingSegments) ? d.settingSegments : [];
           if (d && d.snapshotView) view = d.snapshotView;
         } catch (e) {
           points = [];
@@ -45702,6 +45721,7 @@ class Component extends DCLogic {
     detail.fixes = route.map((p) => [p[0], p[1]]);
     detail.series = this._energySeries(points, route);
     detail.stops = stops;
+    detail.settingSegments = settingSegments;
     detail.frame = this._energyOverlayFrame(detail.fixes, view);
     if (!demo && trip.snapshotPath) {
       const b = this._energyBridge();

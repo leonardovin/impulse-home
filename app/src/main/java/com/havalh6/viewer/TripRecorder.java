@@ -62,7 +62,8 @@ final class TripRecorder implements TripEngine.Listener {
             TripEngine.KEY_READY, TripEngine.KEY_SPEED, TripEngine.KEY_ODOMETER,
             TripEngine.KEY_VOLTAGE, TripEngine.KEY_CURRENT, TripEngine.KEY_FUEL_INST,
             TripEngine.KEY_ICE, TripEngine.KEY_FLOW, TripEngine.KEY_FUEL_PCT, TripEngine.KEY_NAV, TripEngine.KEY_SOC,
-            RangeLedger.KEY_EV_RANGE));
+            RangeLedger.KEY_EV_RANGE,
+            TripSetting.KEY_DRIVE_MODE, TripSetting.KEY_POWER_MODE, TripSetting.KEY_RESERVE, TripSetting.KEY_SOC_TARGET));
 
     private static TripRecorder instance;
 
@@ -464,6 +465,15 @@ final class TripRecorder implements TripEngine.Listener {
     }
 
     @Override
+    public void onSetting(long startMs, TripSetting setting) {
+        TripStore s = store;
+        if (s == null) return;
+        s.insertSetting(startMs, setting);
+        Log.w(TAG, String.format(Locale.US, "trip setting %d: %s at %.2f km",
+                startMs, setting.label(), setting.km));
+    }
+
+    @Override
     public void onTripDiscarded(long startMs) {
         TripStore s = store;
         synchronized (pending) {
@@ -471,6 +481,7 @@ final class TripRecorder implements TripEngine.Listener {
         }
         if (s == null) return;
         s.deletePoints(startMs);
+        s.deleteSettings(startMs);
         s.clearCheckpoint();
         Log.w(TAG, "trip discarded " + startMs);
     }

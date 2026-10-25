@@ -115,6 +115,7 @@ only flushes the recorder.
   - `days` (date, km, fuel L, kWh out, kWh regen, EV km, drive time) — forever
   - months — a `GROUP BY` over `days`, not a table
   - `open_trip` — the single-row checkpoint
+  - `trip_settings` (trip_id, t, drive mode, energy mode, HEV reserve, SOC target, running totals) — forever; see *Driving settings per trip*
 - **Clock.** Everything is stamped with the wall clock, and the MMI's clock may
   be wrong at boot until GNSS/NTP corrects it. A step longer than 10 s is never
   integrated across, so a correction cannot inflate a trip, but the START time of
@@ -452,6 +453,43 @@ a file manager, `adb pull`). The section only shows when `window.TripBridge` has
   - **Checked on the car 2026-10-25:** an iPhone on the car's Wi-Fi scanned it
     and downloaded the zip. From the laptop on the hotspot, a wrong token and
     `../trips.db` got 404, and the port closed once the code was dismissed.
+
+## Driving settings per trip
+
+Consumption alone says how a trip went, not why. Each trip therefore records the
+settings it was driven in, and the moment each changed, so a result can be put
+down to a setting.
+
+- **Keys** (Impulse's, read-only here): `car.drive_setting.drive_mode` (Eco 2 /
+  Normal 0 / Esportivo 1 / Neve / Areia / Lama / AWD, as the DRIVING card writes
+  them), `car.ev_setting.power_model_config` (0 HEV / 1 EVP / 3 EV),
+  `car.ev_setting.power_reserve_config` (in HEV, 2 = Prioritário, anything
+  else Inteligente) and `car.ev_setting.charge_soc_target_config` (the
+  Prioritário SOC target, the 20-80 % slider). All four reach the viewer;
+  checked on the car 2026-10-25.
+- **Rows** (`TripEngine.onSetting` → `trip_settings`). One row when the trip
+  opens, and one per change after that, each with the trip's running totals at
+  that moment: km, kWh out and in, fuel, EV km, drive and idle time. A row is
+  written once the settings have held for `SETTING_SETTLE_MS` (5 s), stamped
+  with the burst's first moment and totals, so a slider drag is one change and a
+  change undone within the burst is none. The last written combination is in
+  the checkpoint (`settingsSig`), so Impulse's replay after a restart is not a
+  change. A discarded trip takes its rows with it; `PersistBackup` merges the
+  table like `trip_stops`.
+- **Stretches** (`TripSetting.segments`, pure and JVM-tested). Each row runs
+  until the next one, or to the trip's end totals: its own km, kWh out and in,
+  fuel, EV km and time, with kWh/100 km and km/L. Totals that went backwards
+  count as 0.
+- **Where they show.**
+  - `getTrip` and every export carry `settings` and `settingSegments`.
+  - The CSV adds `settingsStart`, `settingsMain` (the combination with the most
+    km) and `settingChanges`.
+  - A closed trip's DADOS lists AJUSTES: one row per stretch, with its distance
+    and economy.
+  - Trips recorded before this have none.
+- **Limits.** A stretch is attribution, not proof: traffic, climb and
+  temperature change with it. A setting changed while parked belongs to the
+  next trip's first row. Unknown values (not yet replayed) show as `—`.
 
 ## Future (optional): refuel log and fuel price
 

@@ -42,6 +42,7 @@ final class TripExport {
             "stops", "harshAccel", "harshBrake", "climbM",
             "startLat", "startLon", "endLat", "endLon",
             "guided", "arrived", "plannedKm", "plannedS", "guidedKm", "guidedS", "detailKept",
+            "settingsStart", "settingsMain", "settingChanges",
     };
 
     private static final Pattern ZIP_NAME = Pattern.compile("viagens-\\d{8}-\\d{6}\\.zip");

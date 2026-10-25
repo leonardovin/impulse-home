@@ -210,6 +210,12 @@ const CHECKS = {
   'export link answers only on Wi-Fi': ({ link }) =>
     (javaMethod(link, 'private static void serve(') || '').includes('if (!onWifi(conn.getLocalAddress())) continue;')
     && (javaMethod(link, 'private static List<InetAddress> wifiAddresses(') || '').includes('TripExport.isWifiInterface(ni.getName())'),
+  // Driving settings (TripSetting): the recorder listens for them and every export carries them,
+  // so a result can be put down to the mode it was driven in.
+  'settings reach the recorder and the export': ({ recorder, store }) =>
+    /TripSetting\.KEY_DRIVE_MODE, TripSetting\.KEY_POWER_MODE, TripSetting\.KEY_RESERVE, TripSetting\.KEY_SOC_TARGET\)\);/.test(recorder)
+    && (javaMethod(store, 'ExportCount exportTrips(') || '').includes('putSettings(trip);')
+    && (javaMethod(store, 'String tripJson(') || '').includes('putSettings(trip);'),
   // Closing the code, or the popup, stops the server at once rather than after 5 minutes.
   'closing the code stops the link': ({ html }) =>
     (method(html, '_closeEnergyExportQr') || '').includes('b.stopExportLink()')
@@ -275,6 +281,8 @@ const MUTANTS = {
     '                || !TripExport.isZipName(zip.getName()) || !zip.isFile()) return -1;', '                || !zip.isFile()) return -1;') }),
   'export link answers only on Wi-Fi': (s) => ({ ...s, link: s.link.replace(
     '                    if (!onWifi(conn.getLocalAddress())) continue;\n', '') }),
+  'settings reach the recorder and the export': (s) => ({ ...s, store: s.store.replace(
+    '                if (trip == null) continue;\n                putSettings(trip);\n', '                if (trip == null) continue;\n') }),
   'closing the code stops the link': (s) => ({ ...s, html: s.html.replace(
     "    try { if (b && typeof b.stopExportLink === 'function') b.stopExportLink(); } catch (e) {}\n", '') }),
 };
