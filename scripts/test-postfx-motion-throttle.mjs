@@ -1,6 +1,6 @@
 // While the camera moves, bloom + streak rebuild on one rendered frame in three, and
 // the first frame after it settles always rebuilds. Each rebuild renders the scene
-// twice more; measured on the car with the camera orbiting, 28.1 fps against 34.2.
+// twice more; measured on the car with the camera orbiting, 29.8 fps against 35.5.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';

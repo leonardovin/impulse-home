@@ -23282,9 +23282,9 @@ class Component extends DCLogic {
    * Each rebuild renders the whole scene twice more (the darkened bloom pass and
    * the streak pass). On the current model that is ~6 ms of a ~15 ms submit, so
    * while the camera orbits every frame missed 16.7 ms and the panel ran on every
-   * other vsync. Measured on the car, camera orbiting, four interleaved rounds:
-   * 28.1 fps with a rebuild per frame against 34.2 at one in three (submit 15.2
-   * against 9.1 ms), the same sign in every round. Camera still, nothing changes:
+   * other vsync. Measured on the car, camera orbiting, eight interleaved pairs:
+   * 29.8 fps with a rebuild per frame against 35.5 at one in three, and timer
+   * lag p90 19.9 against 16.6 ms, the same sign in every pair. Camera still, nothing changes:
    * a dirty overlay rebuilds on the next frame as before.
    *
    * A skipped frame leaves _postFxDirty set and queues one more frame without
