@@ -23293,6 +23293,12 @@ class Component extends DCLogic {
    * to two frames. Same shape as _requestTweenShadow / _settleTweenShadow.
    */
   _postFxRebuildNow(cameraBusy) {
+    // Resize and light warmup leave no real previous frame to reuse.
+    if (this._postFxStale) {
+      this._postFxStale = false;
+      this._postFxMotionFrames = 0;
+      return true;
+    }
     if (!cameraBusy) {
       this._postFxMotionFrames = 0;
       return !!this._postFxDirty;
@@ -23300,6 +23306,8 @@ class Component extends DCLogic {
     if (!this._postFxDirty) return false;
     this._postFxMotionFrames = (this._postFxMotionFrames || 0) + 1;
     if (this._postFxMotionFrames % POSTFX_MOTION_EVERY === 0) return true;
+    // Throttled frames still owe a rebuild; they are not clean cache hits.
+    if (this._perf) this._perf.postFxThrottled = (this._perf.postFxThrottled || 0) + 1;
     if (this.requestRender) this.requestRender(1, true);
     return false;
   }
@@ -27272,6 +27280,8 @@ class Component extends DCLogic {
   // main/bloom/streak programs to compile+render once, turn it back off.
   // Shared by the synchronous and chunked-async warmup runners below.
   _warmupLightKey(k) {
+    // Warmup renders temporary light state into the cached overlay targets.
+    this._postFxStale = true;
     try {
       // 1. Turn this specific group ON
       this._setGroupEmissive(k, true);
@@ -30701,6 +30711,8 @@ class Component extends DCLogic {
       // Mobile renders them at 0.7, which is ~2x the fill for both passes back.
       // Desktop keeps 1.0.
       this._resizePostFX = (W, H) => {
+        // Reallocated targets must be filled before the throttle can reuse them.
+        this._postFxStale = true;
         const postFxScale = this._perfMobile ? 0.7 : 1;
         const targetW = Math.max(1, Math.round(W * postFxScale));
         const targetH = Math.max(1, Math.round(H * postFxScale));
@@ -31471,7 +31483,7 @@ class Component extends DCLogic {
             scene.background = savedBg;
             this._postFxDirty = false;
             this._perf.postFxRenders = (this._perf.postFxRenders || 0) + 1;
-          } else {
+          } else if (!this._postFxDirty) {
             this._perf.postFxCacheHits = (this._perf.postFxCacheHits || 0) + 1;
           }
 
