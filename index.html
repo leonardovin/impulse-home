@@ -1971,6 +1971,15 @@ window.HavalSplash = (function () {
             </div>
           </div>
         </sc-if>
+        <sc-if value="{{ focusedConsumptionExportDialogOpen }}" hint-placeholder-val="{{ false }}">
+          <div class="hv-energy-confirm" role="alertdialog" aria-label="Exportar viagens">
+            <div class="hv-energy-confirm-box">
+              <strong>{{ focusedConsumptionExportDialogTitle }}</strong>
+              <p>{{ focusedConsumptionExportNote }}</p>
+              <div class="hv-energy-confirm-actions"><sc-if value="{{ focusedConsumptionExportCanSend }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ focusedConsumptionExportSend }}">ENVIAR POR BLUETOOTH</button></sc-if><button type="button" onClick="{{ focusedConsumptionExportDialogClose }}">OK</button></div>
+            </div>
+          </div>
+        </sc-if>
         <sc-if value="{{ focusedConsumptionShowNow }}" hint-placeholder-val="{{ true }}">
           <div class="hv-energy-now2">
             <section class="hv-energy-zone hv-energy-z-instant">
@@ -2026,6 +2035,8 @@ window.HavalSplash = (function () {
                 <sc-if value="{{ focusedConsumptionTripsEmptyShow }}" hint-placeholder-val="{{ false }}"><p class="hv-energy-empty">{{ focusedConsumptionTripsEmpty }}</p></sc-if>
               </div>
               <sc-if value="{{ focusedConsumptionShowToggles }}" hint-placeholder-val="{{ true }}"><div class="hv-energy-seg hv-energy-tripseg" role="group" aria-label="Mostrar"><button type="button" class="{{ focusedConsumptionTripMapClass }}" onClick="{{ focusedConsumptionTripViewMap }}">MAPA</button><button type="button" class="{{ focusedConsumptionTripDataClass }}" onClick="{{ focusedConsumptionTripViewData }}">DADOS</button></div></sc-if>
+              <sc-if value="{{ focusedConsumptionCanPick }}" hint-placeholder-val="{{ false }}"><div class="hv-energy-seg hv-energy-setone"><button type="button" onClick="{{ focusedConsumptionPickStart }}">SELECIONAR</button></div></sc-if>
+              <sc-if value="{{ focusedConsumptionPicking }}" hint-placeholder-val="{{ false }}"><div class="hv-energy-seg hv-energy-tripseg" role="group" aria-label="Exportar seleção"><button type="button" onClick="{{ focusedConsumptionPickCancel }}">CANCELAR</button><button type="button" class="{{ focusedConsumptionPickExportClass }}" onClick="{{ focusedConsumptionPickExport }}">{{ focusedConsumptionPickExportLabel }}</button></div></sc-if>
             </div>
             <sc-if value="{{ focusedConsumptionShowDetail }}" hint-placeholder-val="{{ false }}">
               <div class="hv-energy-detail">
@@ -2054,6 +2065,7 @@ window.HavalSplash = (function () {
                 <sc-if value="{{ focusedConsumptionTripShowData }}" hint-placeholder-val="{{ false }}">
                   <div class="hv-energy-datapane slim-scrollbar">
                     <sc-if value="{{ focusedConsumptionFinishInData }}" hint-placeholder-val="{{ false }}"><button type="button" class="hv-energy-finish" onClick="{{ focusedConsumptionFinishTrip }}">FINALIZAR VIAGEM</button></sc-if>
+                    <sc-if value="{{ focusedConsumptionCanExportTrip }}" hint-placeholder-val="{{ false }}"><button type="button" class="hv-energy-exportone" onClick="{{ focusedConsumptionExportTrip }}">EXPORTAR VIAGEM</button></sc-if>
                     <div class="hv-energy-kvgroups" data-en-live="{{ focusedConsumptionDetailLiveStats }}"><sc-for list="{{ focusedConsumptionDetailStatGroups }}" as="sg" hint-placeholder-count="3"><section class="hv-energy-kvg {{ sg.cls }}"><p class="hv-energy-zlabel">{{ sg.label }}</p><ul class="hv-energy-kv"><sc-for list="{{ sg.rows }}" as="kv" hint-placeholder-count="4"><li><small>{{ kv.k }}</small><b>{{ kv.v }}</b></li></sc-for></ul></section></sc-for></div>
                     <sc-if value="{{ focusedConsumptionDetailHasInsights }}" hint-placeholder-val="{{ false }}">
                       <ul class="hv-energy-insights"><sc-for list="{{ focusedConsumptionDetailInsights }}" as="ins" hint-placeholder-count="3"><li class="{{ ins.cls }}">{{ ins.text }}</li></sc-for></ul>
@@ -7534,6 +7546,15 @@ window.HavalSplash = (function () {
     .hv-energy-list > button > strong { font-size:14px; font-weight:560; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .hv-energy-list > button > small { grid-row:2; font-size:11px; opacity:.72; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .hv-energy-list > button.live > strong { color:var(--hv-readable-accent,var(--hv-accent)); }
+    /* SELECIONAR: a tick column on the left of each saved trip; the open trip dims. */
+    .hv-energy-list > button.picking { grid-template-columns:22px minmax(0,1fr); }
+    .hv-energy-list > button.picking::before { content:''; grid-row:1 / span 2; width:18px; height:18px; border:2px solid rgba(255,255,255,.5); border-radius:6px; box-sizing:border-box; }
+    .hv-energy-list > button.picked { border-color:var(--hv-accent); }
+    .hv-energy-list > button.picked::before { border-color:var(--hv-accent); background:var(--hv-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23061016' d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center / 14px no-repeat; }
+    .hv-energy-list > button.picking > strong,.hv-energy-list > button.picking > small { grid-column:2; }
+    .hv-energy-list > button.nopick { opacity:.45; }
+    .hv-energy-seg button.off { opacity:.4; }
+    .hv-energy-exportone { align-self:flex-start; min-height:48px; padding:0 20px; border:1px solid var(--hv-frost-edge,rgba(255,255,255,.18)); border-radius:14px; background:var(--hv-control-fill,rgba(255,255,255,.08)); color:inherit; font:600 13px/1 var(--hv-font); letter-spacing:.06em; cursor:pointer; }
     .hv-energy-empty { margin:10px 4px; font-size:13px; line-height:1.45; opacity:.8; }
     .hv-energy-detail { min-width:0; min-height:0; padding:10px; border-radius:16px; background:rgba(255,255,255,.035); display:flex; flex-direction:column; }
     .hv-energy-mappane { flex:1; min-height:0; display:flex; flex-direction:column; gap:8px; }
@@ -10869,6 +10890,10 @@ class Component extends DCLogic {
     // EXPORTAR VIAGENS: the last TripBridge.getExportStatus() the page has read.
     energyExport: null,
     energyExportSent: null,
+    // Export started from VIAGENS (one trip, or a selection): its result shows in a dialog.
+    energyExportDialog: false,
+    // VIAGENS selection mode: the start times picked for export, or null when not selecting.
+    energyTripPick: null,
     energyMapMax: false,
     energyTripView: 'map',
     energyHistoryView: 'chart',
@@ -40711,7 +40736,7 @@ class Component extends DCLogic {
 
   _closeFocusedCard() {
     if (this.state.focusedCardType === 'climate') this._clearClimatePanelHold();
-    if (this.state.focusedCardType) this.setState({ focusedCardType: null, energyFinishConfirm: false, energyMapMax: false });
+    if (this.state.focusedCardType) this.setState({ focusedCardType: null, energyFinishConfirm: false, energyMapMax: false, energyTripPick: null, energyExportDialog: false });
   }
 
   _createFocusedCardDesktop(type) {
@@ -42841,7 +42866,7 @@ class Component extends DCLogic {
     this._cardControlEvent(ev);
     if (tab !== 'now' && tab !== 'trips' && tab !== 'history') return;
     if (tab !== 'now') this._energyFetchHistory(false);
-    this._uiOnlySetState({ energyTab: tab, energyFinishConfirm: false, energyMapMax: false, energySettingsOpen: false });
+    this._uiOnlySetState({ energyTab: tab, energyFinishConfirm: false, energyMapMax: false, energySettingsOpen: false, energyTripPick: null });
   }
 
   _setEnergyRange(range, ev) {
@@ -43647,6 +43672,7 @@ class Component extends DCLogic {
     }
     if (s.state === 'error') {
       if (s.reason === 'permission') return 'Sem permissão de armazenamento: conceda-a ao Impulse Launcher e tente de novo.';
+      if (s.reason === 'empty') return 'Nenhuma viagem salva foi escolhida.';
       if (s.reason === 'unavailable') return 'O registro de viagens ainda não abriu. Tente de novo em instantes.';
       return 'Não foi possível gravar a exportação. Verifique o espaço livre e tente de novo.';
     }
@@ -43657,14 +43683,20 @@ class Component extends DCLogic {
    * The recorder writes on a thread of its own and answers at once; the page asks
    * for the status once a second until it is done, and commits only when it changes.
    */
-  _startEnergyExport(ev) {
+  /**
+   * {@code starts}: the start times of the trips to export (VIAGENS: one trip, or
+   * a selection); absent for EXPORTAR TUDO. A partial export reports in a dialog.
+   */
+  _startEnergyExport(ev, starts) {
     this._cardControlEvent(ev);
     const b = this._energyExportBridge();
+    const some = Array.isArray(starts);
     if (!b || this._energyExportState().state === 'running') return;
+    if (some && (!starts.length || typeof b.exportTripsOf !== 'function')) return;
     const read = (raw) => { try { return JSON.parse(raw) || { state: 'error' }; } catch (e) { return { state: 'error' }; } };
     let st;
-    try { st = read(b.exportTrips()); } catch (e) { st = { state: 'error' }; }
-    this._uiOnlySetState({ energyExport: st, energyExportSent: null });
+    try { st = read(some ? b.exportTripsOf(starts.join(',')) : b.exportTrips()); } catch (e) { st = { state: 'error' }; }
+    this._uiOnlySetState({ energyExport: st, energyExportSent: null, energyExportDialog: some, energyTripPick: null });
     const poll = () => {
       this._energyExportTimer = 0;
       if (this._unmounted) return;
@@ -43674,6 +43706,27 @@ class Component extends DCLogic {
       this._uiOnlySetState({ energyExport: next });
     };
     if (st.state === 'running') this._energyExportTimer = setTimeout(poll, 1000);
+  }
+
+  _closeEnergyExportDialog(ev) {
+    this._cardControlEvent(ev);
+    this._uiOnlySetState({ energyExportDialog: false });
+  }
+
+  /** SELECIONAR: [] starts picking trips for export, null leaves it. */
+  _setEnergyTripPick(list, ev) {
+    this._cardControlEvent(ev);
+    this._uiOnlySetState({ energyTripPick: Array.isArray(list) ? list : null, energyMapMax: false });
+  }
+
+  _toggleEnergyTripPick(key, live, ev) {
+    this._cardControlEvent(ev);
+    if (live) return;
+    this._uiOnlySetState((st) => {
+      const cur = Array.isArray(st.energyTripPick) ? st.energyTripPick : [];
+      const k = String(key);
+      return { energyTripPick: cur.indexOf(k) >= 0 ? cur.filter((x) => x !== k) : cur.concat([k]) };
+    });
   }
 
   /** The recorder said, when the export finished, whether this head unit has a Bluetooth file share. */
@@ -44448,6 +44501,9 @@ class Component extends DCLogic {
       consumptionExportStart: (ev) => this._startEnergyExport(ev),
       consumptionExportCanSend: this._energyExportCanSend(),
       consumptionExportSend: (ev) => this._sendEnergyExportBluetooth(ev),
+      consumptionExportDialogOpen: !!s.energyExportDialog,
+      consumptionExportDialogTitle: this._energyExportState().state === 'running' ? 'Exportando…' : 'Exportar viagens',
+      consumptionExportDialogClose: (ev) => this._closeEnergyExportDialog(ev),
       consumptionMapMaxClose: (ev) => this._setEnergyMapMax(false, ev),
       consumptionHaltsClass: on(this._energyShowHalts()),
       consumptionHaltsToggle: (ev) => this._toggleEnergyHalts(ev),
@@ -44598,16 +44654,19 @@ class Component extends DCLogic {
     const span = (t) => this._energyDuration((t.driveMs || 0) + (t.idleMs || 0));
     // Short rows (owner, 2026-09-13): the economy figure moved out of the list so
     // the column can shrink and the map can grow.
+    const pick = Array.isArray(this.state.energyTripPick) ? this.state.energyTripPick : null;
     const list = rows.map((r) => {
       const places = r.live ? '' : this._energyPlaces(r.trip);
+      // Selecting for export: a saved trip toggles its tick; the one being recorded is not saved yet.
+      const pickCls = !pick ? '' : (r.live ? ' nopick' : ' picking' + (pick.indexOf(r.key) >= 0 ? ' picked' : ''));
       return {
-        cls: (r.key === selected ? 'on' : '') + (r.live ? ' live' : ''),
+        cls: (!pick && r.key === selected ? 'on' : '') + (r.live ? ' live' : '') + pickCls,
         title: r.live ? this._energyLiveTripTexts(r.trip, m.demo).rowTitle : (places || this._energyWhen(r.trip.startMs)),
         meta: r.live ? this._energyLiveTripTexts(r.trip, m.demo).rowMeta
           : (places ? this._energyWhen(r.trip.startMs) : span(r.trip)) + ' · ' + this._energyKm(r.trip.km),
         liveTitle: r.live ? 'rowTitle' : '',
         liveMeta: r.live ? 'rowMeta' : '',
-        onClick: (ev) => this._selectEnergyTrip(r.key, ev),
+        onClick: (ev) => (pick ? this._toggleEnergyTripPick(r.key, r.live, ev) : this._selectEnergyTrip(r.key, ev)),
       };
     });
     const row = rows.find((r) => r.key === selected) || null;
@@ -44673,7 +44732,19 @@ class Component extends DCLogic {
     // and only when the recorder can do it; a dialog confirms.
     const bridge = this._energyBridge();
     const canFinish = !!(row && row.live && !m.demo && bridge && typeof bridge.finishTrip === 'function');
+    // EXPORTAR VIAGEM / SELECIONAR: saved trips only, and only where the recorder can export a set.
+    const xb = this._energyExportBridge();
+    const canExportSome = !m.demo && !!xb && typeof xb.exportTripsOf === 'function';
     return {
+      consumptionCanExportTrip: canExportSome && !!t && !row.live,
+      consumptionExportTrip: (ev) => this._startEnergyExport(ev, t && !row.live ? [String(t.startMs)] : []),
+      consumptionCanPick: canExportSome && !pick && rows.some((r) => !r.live),
+      consumptionPicking: canExportSome && !!pick,
+      consumptionPickStart: (ev) => this._setEnergyTripPick([], ev),
+      consumptionPickCancel: (ev) => this._setEnergyTripPick(null, ev),
+      consumptionPickExportLabel: pick && pick.length ? 'EXPORTAR ' + pick.length : 'EXPORTAR',
+      consumptionPickExportClass: pick && pick.length ? 'on' : 'off',
+      consumptionPickExport: (ev) => (pick && pick.length ? this._startEnergyExport(ev, pick.slice()) : this._cardControlEvent(ev)),
       consumptionTrips: list,
       consumptionTripsEmptyShow: !list.length,
       consumptionTripsEmpty: m.bridge

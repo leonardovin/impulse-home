@@ -651,31 +651,36 @@ final class TripStore extends SQLiteOpenHelper implements RangeLedger.Store {
     }
 
     /**
-     * EXPORTAR VIAGENS (TripExport): every stored trip, oldest first, with its raw
+     * EXPORTAR VIAGENS (TripExport): every stored trip, or only those in
+     * {@code only} (start times; null for all), oldest first, with its raw
      * trip-computer values, kept route, ALL its samples while they are kept (no
-     * stride) and its stops, plus the daily and all-time totals, to {@code json};
-     * one summary row per trip to {@code csv}.
+     * stride) and its stops, to {@code json}; one summary row per trip to
+     * {@code csv}. The daily and all-time totals cover every trip, so they go
+     * into a full export only ({@code "scope": "all"}), never a selection.
      *
      * <p>Streamed a trip at a time and a sample at a time, so a long drive is never
      * held as one JSON tree: each query holds the connection only while it reads,
      * and the recorder's writes interleave. A trip closed meanwhile is either in
      * the export or not, never half.
      */
-    ExportCount exportTrips(java.io.Writer json, java.io.Writer csv, long nowMs) throws java.io.IOException {
+    ExportCount exportTrips(java.io.Writer json, java.io.Writer csv, long nowMs, java.util.Set<Long> only)
+            throws java.io.IOException {
         ExportCount n = new ExportCount();
         java.util.ArrayList<Long> starts = new java.util.ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery("SELECT start_ms FROM trips ORDER BY start_ms", null)) {
-            while (c.moveToNext()) starts.add(c.getLong(0));
+            while (c.moveToNext()) {
+                if (only == null || only.contains(c.getLong(0))) starts.add(c.getLong(0));
+            }
         }
         json.write("{\"format\":" + JSONObject.quote(TripExport.FORMAT)
                 + ",\"version\":" + TripExport.FORMAT_VERSION
                 + ",\"exportedAt\":" + nowMs
                 + ",\"exportedAtLocal\":" + JSONObject.quote(TripExport.localTime(nowMs))
                 + ",\"dbVersion\":" + DB_VERSION
+                + ",\"scope\":" + (only == null ? "\"all\"" : "\"selection\"")
                 + ",\"pointFields\":" + POINT_FIELDS
                 + ",\"routeFields\":" + ROUTE_FIELDS
-                + ",\"totals\":" + totalsJson()
-                + ",\"days\":" + daysJson("", "9999")
+                + (only == null ? ",\"totals\":" + totalsJson() + ",\"days\":" + daysJson("", "9999") : "")
                 + ",\"trips\":[");
         csv.write(TripExport.csvHeader());
         try {

@@ -97,7 +97,16 @@ final class TripBridge {
      */
     @JavascriptInterface
     public String exportTrips() {
-        return recorder.exportTrips();
+        return recorder.exportTrips(null);
+    }
+
+    /**
+     * The same, for the chosen trips only: their start times, comma-separated
+     * (strings, as in getTrip). Unknown times are skipped; none at all is an error.
+     */
+    @JavascriptInterface
+    public String exportTripsOf(String startMsList) {
+        return recorder.exportTrips(TripExport.parseStarts(startMsList));
     }
 
     /** {state: idle | running | done | error}; done carries the folder, file names and counts, error a reason. */

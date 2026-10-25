@@ -291,23 +291,25 @@ final class TripRecorder implements TripEngine.Listener {
     }
 
     /**
-     * Writes every stored trip to shared storage (TripStore.exportTrips) on a
-     * thread of its own: a long history takes seconds, and on the worker it
-     * would hold back the signals being integrated. One export at a time.
+     * Writes the stored trips (all of them, or only the start times in
+     * {@code only}) to shared storage (TripStore.exportTrips) on a thread of its
+     * own: a long history takes seconds, and on the worker it would hold back the
+     * signals being integrated. One export at a time.
      */
-    synchronized String exportTrips() {
+    synchronized String exportTrips(java.util.Set<Long> only) {
         if (exportThread != null && exportThread.isAlive()) return exportJson;
         TripStore s = store;
         if (s == null) return exportJson = exportError("unavailable");
+        if (only != null && only.isEmpty()) return exportJson = exportError("empty");
         if (!PersistBackup.hasPermission(app)) return exportJson = exportError("permission");
         exportJson = "{\"state\":\"running\"}";
-        exportThread = new Thread(() -> runExport(s), "h6-trip-export");
+        exportThread = new Thread(() -> runExport(s, only), "h6-trip-export");
         exportThread.setPriority(Thread.MIN_PRIORITY);
         exportThread.start();
         return exportJson;
     }
 
-    private void runExport(TripStore s) {
+    private void runExport(TripStore s, java.util.Set<Long> only) {
         long t = now();
         java.io.File dir = new java.io.File(PersistBackup.dir(), TripExport.DIR);
         String stem = TripExport.fileStem(t);
@@ -326,7 +328,7 @@ final class TripRecorder implements TripEngine.Listener {
                          new java.io.FileOutputStream(csvTmp), java.nio.charset.StandardCharsets.UTF_8))) {
                 // A BOM, so a spreadsheet opens the place names as UTF-8.
                 cw.write('﻿');
-                n = s.exportTrips(jw, cw, t);
+                n = s.exportTrips(jw, cw, t, only);
             }
             // Renamed only once complete: a half-written export never looks like one.
             if (!jsonTmp.renameTo(json) || !csvTmp.renameTo(csv)) throw new java.io.IOException("rename");
@@ -344,6 +346,7 @@ final class TripRecorder implements TripEngine.Listener {
             o.put("zipBytes", zip.length());
             // Asked once here, so the page never queries the package manager while it renders.
             o.put("bluetooth", TripExportProvider.bluetoothTarget(app) != null);
+            o.put("scope", only == null ? "all" : "selection");
             o.put("trips", n.trips);
             o.put("points", n.points);
             o.put("stops", n.stops);

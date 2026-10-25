@@ -131,9 +131,9 @@ const CHECKS = {
   // worker it would hold back the signals being integrated, on the bridge thread
   // it would freeze the page; it gets a thread of its own and the page polls.
   'export runs on its own thread': ({ html, recorder }) => {
-    const start = javaMethod(recorder, 'synchronized String exportTrips()') || '';
+    const start = javaMethod(recorder, 'synchronized String exportTrips(') || '';
     const page = method(html, '_startEnergyExport') || '';
-    return start.includes('new Thread(() -> runExport(s), "h6-trip-export")') && start.includes('exportThread.start();')
+    return start.includes('new Thread(() -> runExport(s, only), "h6-trip-export")') && start.includes('exportThread.start();')
       && !/^\s*runExport\(/m.test(start)
       && /setTimeout\(poll, 1000\)/.test(page) && page.includes('b.getExportStatus()');
   },
@@ -176,6 +176,26 @@ const CHECKS = {
     && (method(html, '_energyExportCanSend') || '').includes("st.bluetooth === true")
     && html.includes('<sc-if value="{{ focusedConsumptionExportCanSend }}"')
     && !/bluetoothTarget|sendExportBluetooth/.test(method(html, '_consumptionWidgetView') || ''),
+  // EXPORTAR VIAGEM / SELECIONAR: the trip in view, or the ticked ones, and nothing else.
+  'one trip or a selection exports only those trips': ({ html, store }) => {
+    const start = method(html, '_startEnergyExport') || '';
+    const trips = method(html, '_energyTripsView') || '';
+    const body = javaMethod(store, 'ExportCount exportTrips(') || '';
+    return start.includes("b.exportTripsOf(starts.join(','))")
+      && trips.includes("this._startEnergyExport(ev, t && !row.live ? [String(t.startMs)] : [])")
+      && trips.includes('this._startEnergyExport(ev, pick.slice())')
+      && body.includes('if (only == null || only.contains(c.getLong(0))) starts.add(c.getLong(0));');
+  },
+  // Daily and all-time totals cover every trip: a selection carrying them would misstate it.
+  'a selection never carries the all-time totals': ({ store }) =>
+    /\(only == null \? ",\\"totals\\":" \+ totalsJson\(\)/.test(javaMethod(store, 'ExportCount exportTrips(') || ''),
+  // While selecting, a tap ticks a saved trip; it never opens one, and the open trip is not saved yet.
+  'selecting ticks saved trips only': ({ html }) => {
+    const trips = method(html, '_energyTripsView') || '';
+    const toggle = method(html, '_toggleEnergyTripPick') || '';
+    return trips.includes('onClick: (ev) => (pick ? this._toggleEnergyTripPick(r.key, r.live, ev) : this._selectEnergyTrip(r.key, ev)),')
+      && /if \(live\) return;/.test(toggle) && noCommit(method(html, '_energyExportText'));
+  },
 };
 
 const MUTANTS = {
@@ -215,7 +235,7 @@ const MUTANTS = {
   'finishing a trip asks for confirmation': (s) => ({ ...s, html: s.html.replace(
     '    this._uiOnlySetState({ energyFinishConfirm: true });', '    this._confirmFinishEnergyTrip(ev);') }),
   'export runs on its own thread': (s) => ({ ...s, recorder: s.recorder.replace(
-    '        exportThread.start();\n', '        runExport(s);\n') }),
+    '        exportThread.start();\n', '        runExport(s, only);\n') }),
   'export keeps every sample': (s) => ({ ...s, store: s.store.replace(
     '                    while (c.moveToNext()) {\n                        if (n.points > before)',
     '                    int stride = 2, i = 0;\n                    while (c.moveToNext()) {\n                        if (i++ % stride != 0) continue;\n                        if (n.points > before)') }),
@@ -227,6 +247,12 @@ const MUTANTS = {
     'if (!TripExport.isZipName(name) || uri.getPathSegments().size() != 1)', 'if (name == null)') }),
   'bluetooth send only where the head unit has it': (s) => ({ ...s, html: s.html.replace(
     "return st.state === 'done' && st.bluetooth === true &&", "return st.state === 'done' &&") }),
+  'one trip or a selection exports only those trips': (s) => ({ ...s, store: s.store.replace(
+    'if (only == null || only.contains(c.getLong(0))) starts.add(c.getLong(0));', 'starts.add(c.getLong(0));') }),
+  'a selection never carries the all-time totals': (s) => ({ ...s, store: s.store.replace(
+    '(only == null ? ",\\"totals\\":" + totalsJson()', '("" == null ? "" : ",\\"totals\\":" + totalsJson()') }),
+  'selecting ticks saved trips only': (s) => ({ ...s, html: s.html.replace(
+    '    if (live) return;\n    this._uiOnlySetState((st) => {', '    this._uiOnlySetState((st) => {') }),
 };
 
 const changed = (a, b) => Object.keys(a).some((k) => a[k] !== b[k]);

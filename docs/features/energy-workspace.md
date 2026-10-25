@@ -399,6 +399,15 @@ a file manager, `adb pull`). The section only shows when `window.TripBridge` has
   among the last 30 (`detailKept`), never strided. `pointFields` and
   `routeFields` name the array columns. The CSV is one row per trip (RFC 4180,
   UTF-8 with BOM, dot decimals, local start / end times) for a spreadsheet.
+- **One trip or a selection.** In VIAGENS, a saved trip's DADOS pane has
+  EXPORTAR VIAGEM. SELECIONAR under the list turns the rows into ticks: the open
+  trip cannot be ticked because it is not saved yet. EXPORTAR n then exports
+  only the ticked trips (`TripBridge.exportTripsOf`, start times
+  comma-separated). The files are the same, with `scope` `selection` and without
+  `totals` and `days`, which cover every trip. The result, and ENVIAR POR
+  BLUETOOTH, show in a dialog over the popup. Selection is popup-only and resets
+  when the popup closes or the tab changes. Only the listed trips can be ticked:
+  the list shows the last 30.
 - **Cost.** `TripRecorder.exportTrips` runs `TripStore.exportTrips` on a thread of
   its own at minimum priority: on the worker it would hold back the signals being
   integrated, on the bridge thread it would block the page. It streams a trip at a

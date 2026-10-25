@@ -74,6 +74,15 @@ public class TripExportTest {
     }
 
     @Test
+    public void aSelectionIsTheStartTimesThePageSent() {
+        assertEquals(new java.util.LinkedHashSet<>(Arrays.asList(1726221600000L, 1726308000000L)),
+                TripExport.parseStarts(" 1726221600000,1726308000000,1726221600000"));
+        assertEquals(new java.util.LinkedHashSet<>(Arrays.asList(5L)), TripExport.parseStarts("x,,5,-3,1e3"));
+        assertTrue(TripExport.parseStarts("").isEmpty());
+        assertTrue(TripExport.parseStarts(null).isEmpty());
+    }
+
+    @Test
     public void theZipCarriesBothFilesUnderTheirNames() throws Exception {
         File json = tmp.newFile("viagens-20261025-143005.json");
         File csv = tmp.newFile("viagens-20261025-143005.csv");

@@ -48,6 +48,20 @@ final class TripExport {
 
     private TripExport() {}
 
+    /** "1726221600000,1726308000000" from the page: the set of trips to export; unreadable entries are dropped. */
+    static java.util.Set<Long> parseStarts(String list) {
+        java.util.Set<Long> out = new java.util.LinkedHashSet<>();
+        if (list == null) return out;
+        for (String part : list.split(",")) {
+            try {
+                long v = Long.parseLong(part.trim());
+                if (v > 0) out.add(v);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
     /** An export zip's bare name, as fileStem makes it: what TripExportProvider may serve. */
     static boolean isZipName(String name) {
         return name != null && ZIP_NAME.matcher(name).matches();
