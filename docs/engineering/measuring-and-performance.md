@@ -240,6 +240,16 @@ explains it. Measure the specific change; do not reason from this table.
   cannot run the viewer at all (`String.prototype.matchAll` needs Chrome 73), so it
   could not be used.
 
+  On the car (WebView 91), parked, these two paths could not be exercised.
+  `tpms_status` arrived in 1 of 21 ten-second windows, and there was no guidance,
+  so the tyre and navigation A/B still needs a drive. The native batching
+  (`TelemetryBatch`, see [android-shell](../architecture/android-shell.md)) did show
+  on the parked bus: a burst of 141 broadcasts reached the page in one script
+  execution, where each would have been its own `evaluateJavascript`. A cold-start
+  A/B with and without the batching, three interleaved pairs on a rested unit,
+  showed no measurable change: `viewerReady` at 10.53 s against 10.60 s (medians),
+  with pairs of both signs, and the same intro frame rate (26-27 fps).
+
 - **A hidden WebView is still on the panel, and its render loop is dead.** The
   loop is driven only by `requestAnimationFrame`. When another app takes window
   focus — a freeform app in a launcher slot, the OEM scene manager — Android
