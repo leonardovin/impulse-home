@@ -1892,6 +1892,13 @@ window.HavalSplash = (function () {
               <div class="hv-energy-setrow"><small>PERGUNTAR AO ABASTECER / RECARREGAR</small><div class="hv-energy-seg"><button type="button" class="{{ focusedConsumptionCfgAskOnClass }}" onClick="{{ focusedConsumptionCfgAskOn }}">SIM</button><button type="button" class="{{ focusedConsumptionCfgAskOffClass }}" onClick="{{ focusedConsumptionCfgAskOff }}">NÃO</button></div></div>
               <small class="hv-energy-setnote">Usados quando um abastecimento ou recarga não tem preço. Cada preço informado vale para o volume abastecido e se mistura ao que já havia no tanque ou na bateria.</small>
             </section>
+            <sc-if value="{{ focusedConsumptionExportAvailable }}" hint-placeholder-val="{{ false }}">
+            <section>
+              <p class="hv-energy-zlabel">EXPORTAR VIAGENS</p>
+              <div class="hv-energy-seg hv-energy-setone"><button type="button" class="{{ focusedConsumptionExportClass }}" onClick="{{ focusedConsumptionExportStart }}">{{ focusedConsumptionExportLabel }}</button></div>
+              <small class="hv-energy-setnote">{{ focusedConsumptionExportNote }}</small>
+            </section>
+            </sc-if>
           </div>
         </sc-if>
         <sc-if value="{{ focusedConsumptionMapMaxOpen }}" hint-placeholder-val="{{ false }}">
@@ -7748,6 +7755,7 @@ window.HavalSplash = (function () {
     .hv-energy-setrow > small,.hv-energy-setnote { font:600 10px/1.3 var(--hv-font); letter-spacing:.06em; opacity:.72; }
     .hv-energy-setnote { font:400 12px/1.4 var(--hv-font); letter-spacing:0; opacity:.7; }
     .hv-energy-setfull { display:grid; grid-template-columns:1fr 1fr; }
+    .hv-energy-setone { display:grid; grid-template-columns:1fr; }
     .hv-energy-price { height:44px; padding:0 12px; border:1px solid rgba(255,255,255,.18); border-radius:12px; background:rgba(255,255,255,.06); color:inherit; font:500 17px/1 var(--hv-font); }
     /* Overlays live inside .hv-energy-mapwrap so they stay on the map (owner, 2026-09-26).
        Keep all four edges pinned — left/bottom:auto after inset:0 collapses the bar to 0×0. */
@@ -10857,6 +10865,8 @@ class Component extends DCLogic {
     energyTripGraph: false,
     energyStopSel: -1,
     energyFinishConfirm: false,
+    // EXPORTAR VIAGENS: the last TripBridge.getExportStatus() the page has read.
+    energyExport: null,
     energyMapMax: false,
     energyTripView: 'map',
     energyHistoryView: 'chart',
@@ -43596,6 +43606,64 @@ class Component extends DCLogic {
     this._uiOnlySetState((st) => ({ energyRev: (st.energyRev || 0) + 1, energyAsk: on ? st.energyAsk : null }));
   }
 
+  /**
+   * EXPORTAR VIAGENS reads window.TripBridge directly, not _energyBridge(): the
+   * saved trips are there whether or not the bus is talking (demo on the bench).
+   */
+  _energyExportBridge() {
+    const b = window.TripBridge;
+    return b && typeof b.exportTrips === 'function' && typeof b.getExportStatus === 'function' ? b : null;
+  }
+
+  _energyExportState() {
+    return this.state.energyExport || { state: 'idle' };
+  }
+
+  _energyExportNote() {
+    return this._energyExportText(this._energyExportState());
+  }
+
+  /** Pure: the note under EXPORTAR TUDO for a TripBridge.getExportStatus() object. */
+  _energyExportText(st) {
+    const s = st || {};
+    if (s.state === 'running') return 'Exportando… pode levar alguns segundos com muitas viagens.';
+    if (s.state === 'done') {
+      const trips = Number(s.trips) || 0;
+      const points = Number(s.points) || 0;
+      return (trips === 1 ? '1 viagem' : trips + ' viagens') + ' e ' + points + ' amostras salvas em '
+        + s.dir + ': ' + s.json + ' (tudo) e ' + s.csv + ' (planilha).';
+    }
+    if (s.state === 'error') {
+      if (s.reason === 'permission') return 'Sem permissão de armazenamento: conceda-a ao Impulse Launcher e tente de novo.';
+      if (s.reason === 'unavailable') return 'O registro de viagens ainda não abriu. Tente de novo em instantes.';
+      return 'Não foi possível gravar a exportação. Verifique o espaço livre e tente de novo.';
+    }
+    return 'Todas as viagens salvas, com resumo, rota, amostras, abastecimentos e recargas, num .json completo e num .csv para planilhas, em /sdcard/HavalH6Viewer/exports.';
+  }
+
+  /**
+   * The recorder writes on a thread of its own and answers at once; the page asks
+   * for the status once a second until it is done, and commits only when it changes.
+   */
+  _startEnergyExport(ev) {
+    this._cardControlEvent(ev);
+    const b = this._energyExportBridge();
+    if (!b || this._energyExportState().state === 'running') return;
+    const read = (raw) => { try { return JSON.parse(raw) || { state: 'error' }; } catch (e) { return { state: 'error' }; } };
+    let st;
+    try { st = read(b.exportTrips()); } catch (e) { st = { state: 'error' }; }
+    this._uiOnlySetState({ energyExport: st });
+    const poll = () => {
+      this._energyExportTimer = 0;
+      if (this._unmounted) return;
+      let next;
+      try { next = read(b.getExportStatus()); } catch (e) { next = { state: 'error' }; }
+      if (next.state === 'running') { this._energyExportTimer = setTimeout(poll, 1000); return; }
+      this._uiOnlySetState({ energyExport: next });
+    };
+    if (st.state === 'running') this._energyExportTimer = setTimeout(poll, 1000);
+  }
+
   /** Every refuel and charge the recorder knows (demo: a priced pair). Merges duplicates from same session. */
   _energyStopList() {
     const h = this._energyCache;
@@ -44345,6 +44413,11 @@ class Component extends DCLogic {
       consumptionCfgAskOffClass: on(this._energyPrices().ask === false),
       consumptionCfgAskOn: (ev) => this._setEnergyPriceAsk(true, ev),
       consumptionCfgAskOff: (ev) => this._setEnergyPriceAsk(false, ev),
+      consumptionExportAvailable: !!this._energyExportBridge(),
+      consumptionExportClass: on(this._energyExportState().state === 'running'),
+      consumptionExportLabel: this._energyExportState().state === 'running' ? 'EXPORTANDO…' : 'EXPORTAR TUDO',
+      consumptionExportNote: this._energyExportNote(),
+      consumptionExportStart: (ev) => this._startEnergyExport(ev),
       consumptionMapMaxClose: (ev) => this._setEnergyMapMax(false, ev),
       consumptionHaltsClass: on(this._energyShowHalts()),
       consumptionHaltsToggle: (ev) => this._toggleEnergyHalts(ev),
@@ -51279,6 +51352,7 @@ class Component extends DCLogic {
 
   componentWillUnmount() {
     this._unmounted = true;
+    clearTimeout(this._energyExportTimer);
     clearTimeout(this._saveFlashTimer);
     clearTimeout(this._perfToastTimer);
     clearTimeout(this._launcherRevealTimer);

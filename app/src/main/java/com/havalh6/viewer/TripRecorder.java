@@ -280,6 +280,80 @@ final class TripRecorder implements TripEngine.Listener {
         return m == null ? "" : m.dataUrl(startMs);
     }
 
+    // ── EXPORTAR VIAGENS ───────────────────────────────────────────────────
+
+    /** {state: idle | running | done | error, ...}; read by the page while it waits. */
+    private volatile String exportJson = "{\"state\":\"idle\"}";
+    private Thread exportThread;
+
+    String exportStatusJson() {
+        return exportJson;
+    }
+
+    /**
+     * Writes every stored trip to shared storage (TripStore.exportTrips) on a
+     * thread of its own: a long history takes seconds, and on the worker it
+     * would hold back the signals being integrated. One export at a time.
+     */
+    synchronized String exportTrips() {
+        if (exportThread != null && exportThread.isAlive()) return exportJson;
+        TripStore s = store;
+        if (s == null) return exportJson = exportError("unavailable");
+        if (!PersistBackup.hasPermission(app)) return exportJson = exportError("permission");
+        exportJson = "{\"state\":\"running\"}";
+        exportThread = new Thread(() -> runExport(s), "h6-trip-export");
+        exportThread.setPriority(Thread.MIN_PRIORITY);
+        exportThread.start();
+        return exportJson;
+    }
+
+    private void runExport(TripStore s) {
+        long t = now();
+        java.io.File dir = new java.io.File(PersistBackup.dir(), TripExport.DIR);
+        String stem = TripExport.fileStem(t);
+        java.io.File json = new java.io.File(dir, stem + ".json");
+        java.io.File csv = new java.io.File(dir, stem + ".csv");
+        java.io.File jsonTmp = new java.io.File(dir, stem + ".json.tmp");
+        java.io.File csvTmp = new java.io.File(dir, stem + ".csv.tmp");
+        try {
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new java.io.IOException("mkdirs " + dir);
+            TripStore.ExportCount n;
+            try (java.io.Writer jw = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                         new java.io.FileOutputStream(jsonTmp), java.nio.charset.StandardCharsets.UTF_8), 64 * 1024);
+                 java.io.Writer cw = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                         new java.io.FileOutputStream(csvTmp), java.nio.charset.StandardCharsets.UTF_8))) {
+                // A BOM, so a spreadsheet opens the place names as UTF-8.
+                cw.write('﻿');
+                n = s.exportTrips(jw, cw, t);
+            }
+            // Renamed only once complete: a half-written export never looks like one.
+            if (!jsonTmp.renameTo(json) || !csvTmp.renameTo(csv)) throw new java.io.IOException("rename");
+            android.media.MediaScannerConnection.scanFile(app,
+                    new String[]{json.getAbsolutePath(), csv.getAbsolutePath()}, null, null);
+            JSONObject o = new JSONObject();
+            o.put("state", "done");
+            o.put("dir", dir.getAbsolutePath());
+            o.put("json", json.getName());
+            o.put("csv", csv.getName());
+            o.put("trips", n.trips);
+            o.put("points", n.points);
+            o.put("stops", n.stops);
+            o.put("bytes", json.length() + csv.length());
+            o.put("ms", now() - t);
+            exportJson = o.toString();
+            Log.w(TAG, "trips exported: " + exportJson);
+        } catch (Exception e) {
+            Log.w(TAG, "trip export failed", e);
+            jsonTmp.delete();
+            csvTmp.delete();
+            exportJson = exportError("write");
+        }
+    }
+
+    private static String exportError(String reason) {
+        return "{\"state\":\"error\",\"reason\":\"" + reason + "\"}";
+    }
+
     // ── engine callbacks (worker thread) ───────────────────────────────────
 
     @Override

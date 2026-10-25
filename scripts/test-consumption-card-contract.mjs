@@ -18,6 +18,8 @@ const SOURCE = {
   html: read('index.html'),
   java: read('app/src/main/java/com/havalh6/viewer/MainActivity.java'),
   renderer: read('app/src/main/java/com/havalh6/viewer/TripMapRenderer.java'),
+  store: read('app/src/main/java/com/havalh6/viewer/TripStore.java'),
+  recorder: read('app/src/main/java/com/havalh6/viewer/TripRecorder.java'),
 };
 
 function method(text, name) {
@@ -34,6 +36,21 @@ function method(text, name) {
 
 // Every <style> block: the card rules do not live in the first one, and
 // scanning only that made a descendant-span check pass vacuously once.
+// A Java method from its signature to its closing brace.
+function javaMethod(text, signature) {
+  const start = text.indexOf(signature);
+  if (start < 0) return null;
+  const brace = text.indexOf('{', start + signature.length);
+  let depth = 0;
+  for (let i = brace; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    if (text[i] === '}' && --depth === 0) return text.slice(start, i + 1);
+  }
+  return null;
+}
+// eslint-disable-next-line no-new-func
+const pure = (html, name) => new Function(`return function ${(method(html, name) || '').trim()}`)();
+
 const css = (html) => (html.match(/<style[^>]*>[\s\S]*?<\/style>/g) || []).join('\n');
 const noCommit = (body) => !!body && !/setState\s*\(/i.test(body);
 
@@ -108,6 +125,38 @@ const CHECKS = {
       && /b\.finishTrip\(\)/.test(confirm)
       && html.includes('FinishConfirm }}">FINALIZAR</button>');
   },
+  // EXPORTAR VIAGENS: a long history takes seconds to write. On the recorder's
+  // worker it would hold back the signals being integrated, on the bridge thread
+  // it would freeze the page; it gets a thread of its own and the page polls.
+  'export runs on its own thread': ({ html, recorder }) => {
+    const start = javaMethod(recorder, 'synchronized String exportTrips()') || '';
+    const page = method(html, '_startEnergyExport') || '';
+    return start.includes('new Thread(() -> runExport(s), "h6-trip-export")') && start.includes('exportThread.start();')
+      && !/^\s*runExport\(/m.test(start)
+      && /setTimeout\(poll, 1000\)/.test(page) && page.includes('b.getExportStatus()');
+  },
+  // "Everything recorded": the export reads every sample, never a strided subset.
+  'export keeps every sample': ({ store }) => {
+    const body = javaMethod(store, 'ExportCount exportTrips(') || '';
+    return /FROM trip_points"\s*\+\s*" WHERE start_ms = \? ORDER BY t"/.test(body)
+      && !/stride|% \w+ != 0/.test(body) && body.includes('tripWithRoute(startMs, true)');
+  },
+  // Written to .tmp and renamed when complete: a power cut mid-export leaves no
+  // file that looks like a finished export.
+  'a half-written export never looks finished': ({ recorder }) => {
+    const body = javaMethod(recorder, 'private void runExport(') || '';
+    return body.includes('new java.io.FileOutputStream(jsonTmp)') && body.includes('new java.io.FileOutputStream(csvTmp)')
+      && body.includes('jsonTmp.renameTo(json)') && body.includes('csvTmp.renameTo(csv)');
+  },
+  'export note states what was written and where': ({ html }) => {
+    const text = pure(html, '_energyExportText');
+    const done = text({ state: 'done', trips: 3, points: 1200, dir: '/sdcard/HavalH6Viewer/exports',
+      json: 'viagens-1.json', csv: 'viagens-1.csv' });
+    return done.startsWith('3 viagens e 1200 amostras') && done.includes('/sdcard/HavalH6Viewer/exports')
+      && done.includes('viagens-1.json') && done.includes('viagens-1.csv')
+      && /permissão/.test(text({ state: 'error', reason: 'permission' }))
+      && html.includes('<sc-if value="{{ focusedConsumptionExportAvailable }}"');
+  },
 };
 
 const MUTANTS = {
@@ -146,6 +195,15 @@ const MUTANTS = {
     "    button(H6_ENERGY_ICONS.add, 'Aproximar', () => zoomAt(1));\n    followBtn = button(H6_ENERGY_ICONS.fitScreen,") }),
   'finishing a trip asks for confirmation': (s) => ({ ...s, html: s.html.replace(
     '    this._uiOnlySetState({ energyFinishConfirm: true });', '    this._confirmFinishEnergyTrip(ev);') }),
+  'export runs on its own thread': (s) => ({ ...s, recorder: s.recorder.replace(
+    '        exportThread.start();\n', '        runExport(s);\n') }),
+  'export keeps every sample': (s) => ({ ...s, store: s.store.replace(
+    '                    while (c.moveToNext()) {\n                        if (n.points > before)',
+    '                    int stride = 2, i = 0;\n                    while (c.moveToNext()) {\n                        if (i++ % stride != 0) continue;\n                        if (n.points > before)') }),
+  'a half-written export never looks finished': (s) => ({ ...s, recorder: s.recorder.replace(
+    'new java.io.FileOutputStream(jsonTmp)', 'new java.io.FileOutputStream(json)') }),
+  'export note states what was written and where': (s) => ({ ...s, html: s.html.replace(
+    "(trips === 1 ? '1 viagem' : trips + ' viagens')", "(trips === 1 ? '1 viagem' : points + ' viagens')") }),
 };
 
 const changed = (a, b) => Object.keys(a).some((k) => a[k] !== b[k]);

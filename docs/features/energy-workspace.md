@@ -384,6 +384,32 @@ are detected. DADOS, the list row and the header repaint each second.
 - **Not verified on the car yet**: GPS cadence, bridge cost of the per-second
   read on the MMI, and how the follow view feels at driving speed.
 
+## Exporting the trips
+
+EXPORTAR TUDO, in the popup's settings sheet (gear in the header), writes every
+saved trip to shared storage, so the history can leave the head unit (a USB stick,
+a file manager, `adb pull`). The section only shows when `window.TripBridge` has
+`exportTrips`.
+
+- **Files.** `/sdcard/HavalH6Viewer/exports/viagens-<yyyyMMdd-HHmmss>.json` and
+  `.csv` (`TripExport`). The JSON (`format` `impulse-trips`, `version` 1) holds the
+  daily and all-time totals and every trip, oldest first, with all of what
+  `getTrip` returns: the summary, `raw` (the trip computer's first and last
+  values), the kept `route`, its `stops`, and **every** sample while the trip is
+  among the last 30 (`detailKept`), never strided. `pointFields` and
+  `routeFields` name the array columns. The CSV is one row per trip (RFC 4180,
+  UTF-8 with BOM, dot decimals, local start / end times) for a spreadsheet.
+- **Cost.** `TripRecorder.exportTrips` runs `TripStore.exportTrips` on a thread of
+  its own at minimum priority: on the worker it would hold back the signals being
+  integrated, on the bridge thread it would block the page. It streams a trip at a
+  time and a sample at a time, so a long drive is never one JSON tree in memory.
+  The page polls `getExportStatus` once a second while it runs and commits only
+  when the status changes. Not measured on the car.
+- **Safety.** Written to `.tmp` and renamed once complete; a failed or cut export
+  leaves no file that looks finished. One export at a time. Needs the storage
+  grant `PersistBackup` already asks for; without it the note says so.
+- Map snapshots are not exported: they are tiles only, and the route is in the JSON.
+
 ## Future (optional): refuel log and fuel price
 
 - Detect a refuel as a jump in `remain_fuel_percentage` while parked; litres =

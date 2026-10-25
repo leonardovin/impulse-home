@@ -90,6 +90,22 @@ final class TripBridge {
         return recorder.totalsJson();
     }
 
+    /**
+     * EXPORTAR VIAGENS: starts writing every stored trip to
+     * /sdcard/HavalH6Viewer/exports and returns at once with the status
+     * ({@link #getExportStatus}); the page polls that until it is done or error.
+     */
+    @JavascriptInterface
+    public String exportTrips() {
+        return recorder.exportTrips();
+    }
+
+    /** {state: idle | running | done | error}; done carries the folder, file names and counts, error a reason. */
+    @JavascriptInterface
+    public String getExportStatus() {
+        return recorder.exportStatusJson();
+    }
+
     /** FINALIZAR VIAGEM: ends the open trip; a new one starts at once if the car is still READY. */
     @JavascriptInterface
     public void finishTrip() {

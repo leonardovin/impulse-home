@@ -591,15 +591,7 @@ final class TripStore extends SQLiteOpenHelper implements RangeLedger.Store {
     /** One trip with its samples, strided down to at most {@code maxPoints}. */
     String tripJson(long startMs, int maxPoints) {
         try {
-            JSONObject trip = null;
-            try (Cursor c = getReadableDatabase().rawQuery("SELECT * FROM trips WHERE start_ms = ?",
-                    new String[]{String.valueOf(startMs)})) {
-                if (c.moveToFirst()) {
-                    trip = tripRow(c);
-                    int ri = c.getColumnIndexOrThrow("route");
-                    if (!c.isNull(ri)) trip.put("route", new JSONArray(c.getString(ri)));
-                }
-            }
+            JSONObject trip = tripWithRoute(startMs, false);
             if (trip == null) return "null";
             JSONArray pts = new JSONArray();
             try (Cursor c = getReadableDatabase().rawQuery(
@@ -613,14 +605,123 @@ final class TripStore extends SQLiteOpenHelper implements RangeLedger.Store {
                     pts.put(pointRow(c));
                 }
             }
-            trip.put("pointFields", new JSONArray(
-                    "[\"t\",\"lat\",\"lon\",\"alt\",\"kmh\",\"kw\",\"fuelMode\",\"fuelRate\",\"ice\",\"km\"]"));
+            trip.put("pointFields", new JSONArray(POINT_FIELDS));
             trip.put("points", pts);
             trip.put("stops", stopsArray(startMs));
             return trip.toString();
         } catch (JSONException e) {
             return "null";
         }
+    }
+
+    private static final String POINT_FIELDS =
+            "[\"t\",\"lat\",\"lon\",\"alt\",\"kmh\",\"kw\",\"fuelMode\",\"fuelRate\",\"ice\",\"km\"]";
+    private static final String ROUTE_FIELDS =
+            "[\"lat\",\"lon\",\"kmh\",\"kw\",\"fuelMode\",\"fuelRate\",\"alt\",\"t\"]";
+
+    /** The trip's row with its kept route (and, for an export, its raw trip-computer values); null when absent. */
+    private JSONObject tripWithRoute(long startMs, boolean withRaw) throws JSONException {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT * FROM trips WHERE start_ms = ?",
+                new String[]{String.valueOf(startMs)})) {
+            if (!c.moveToFirst()) return null;
+            JSONObject trip = tripRow(c);
+            int ri = c.getColumnIndexOrThrow("route");
+            if (!c.isNull(ri)) trip.put("route", new JSONArray(c.getString(ri)));
+            if (withRaw) {
+                int wi = c.getColumnIndexOrThrow("raw_json");
+                Object raw = JSONObject.NULL;
+                if (!c.isNull(wi)) {
+                    try {
+                        raw = new JSONObject(c.getString(wi));
+                    } catch (JSONException e) {
+                        raw = c.getString(wi);
+                    }
+                }
+                trip.put("raw", raw);
+            }
+            return trip;
+        }
+    }
+
+    /** What one export wrote. */
+    static final class ExportCount {
+        int trips;
+        long points;
+        int stops;
+    }
+
+    /**
+     * EXPORTAR VIAGENS (TripExport): every stored trip, oldest first, with its raw
+     * trip-computer values, kept route, ALL its samples while they are kept (no
+     * stride) and its stops, plus the daily and all-time totals, to {@code json};
+     * one summary row per trip to {@code csv}.
+     *
+     * <p>Streamed a trip at a time and a sample at a time, so a long drive is never
+     * held as one JSON tree: each query holds the connection only while it reads,
+     * and the recorder's writes interleave. A trip closed meanwhile is either in
+     * the export or not, never half.
+     */
+    ExportCount exportTrips(java.io.Writer json, java.io.Writer csv, long nowMs) throws java.io.IOException {
+        ExportCount n = new ExportCount();
+        java.util.ArrayList<Long> starts = new java.util.ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT start_ms FROM trips ORDER BY start_ms", null)) {
+            while (c.moveToNext()) starts.add(c.getLong(0));
+        }
+        json.write("{\"format\":" + JSONObject.quote(TripExport.FORMAT)
+                + ",\"version\":" + TripExport.FORMAT_VERSION
+                + ",\"exportedAt\":" + nowMs
+                + ",\"exportedAtLocal\":" + JSONObject.quote(TripExport.localTime(nowMs))
+                + ",\"dbVersion\":" + DB_VERSION
+                + ",\"pointFields\":" + POINT_FIELDS
+                + ",\"routeFields\":" + ROUTE_FIELDS
+                + ",\"totals\":" + totalsJson()
+                + ",\"days\":" + daysJson("", "9999")
+                + ",\"trips\":[");
+        csv.write(TripExport.csvHeader());
+        try {
+            for (long startMs : starts) {
+                JSONObject trip = tripWithRoute(startMs, true);
+                if (trip == null) continue;
+                JSONArray stops = stopsArray(startMs);
+                trip.put("stops", stops);
+                String head = trip.toString();
+                json.write(n.trips == 0 ? "" : ",");
+                // The samples go in after the row, streamed: drop the closing brace and reopen.
+                json.write(head, 0, head.length() - 1);
+                json.write(",\"points\":[");
+                long before = n.points;
+                try (Cursor c = getReadableDatabase().rawQuery(
+                        "SELECT t, lat, lon, alt, kmh, kw, fuel_mode, fuel_rate, ice, km FROM trip_points"
+                                + " WHERE start_ms = ? ORDER BY t", new String[]{String.valueOf(startMs)})) {
+                    while (c.moveToNext()) {
+                        if (n.points > before) json.write(',');
+                        json.write(pointRow(c).toString());
+                        n.points++;
+                    }
+                }
+                json.write("]}");
+                csv.write(csvRow(trip));
+                n.trips++;
+                n.stops += stops.length();
+            }
+        } catch (JSONException e) {
+            throw new java.io.IOException("trip export", e);
+        }
+        json.write("]}");
+        return n;
+    }
+
+    private static String csvRow(JSONObject trip) {
+        Object[] row = new Object[TripExport.CSV_COLUMNS.length];
+        for (int i = 0; i < row.length; i++) {
+            String col = TripExport.CSV_COLUMNS[i];
+            Object v;
+            if ("start".equals(col)) v = TripExport.localTime(trip.optLong("startMs"));
+            else if ("end".equals(col)) v = TripExport.localTime(trip.optLong("endMs"));
+            else v = trip.opt(col);
+            row[i] = v == JSONObject.NULL ? null : v;
+        }
+        return TripExport.csvLine(row);
     }
 
     /**
