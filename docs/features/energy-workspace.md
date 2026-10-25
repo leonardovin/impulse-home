@@ -423,14 +423,35 @@ a file manager, `adb pull`). The section only shows when `window.TripBridge` has
   and the JSON deflates to a fraction of its size over a slow link. Once an
   export is done, the button hands the zip to the system's Bluetooth file
   transfer (OPP), which shows its own device picker and asks the phone to
-  accept. The button only shows when the recorder found a Bluetooth share
-  activity when the export finished (`bluetooth` in the status), because the
-  package is OEM-specific and is matched by name. `TripExportProvider` serves
-  the zip, because targetSdk 28 forbids a `file://` URI in an intent and the app
-  has no androidx. It is read-only and not exported, serves export zips only, by
-  their bare name, and only to the caller the intent grants. iPhones do not
-  receive files over Bluetooth. **Not checked on the car**: whether the MMI ships
-  OPP at all.
+  accept. The button only shows when the recorder found a Bluetooth share it can
+  reach when the export finished (`bluetooth` in the status). The package is
+  OEM-specific and is matched by name.
+  - **Exported share:** `TripExportProvider` serves the zip, because targetSdk 28
+    forbids a `file://` URI in an intent and the app has no androidx. It is
+    read-only and not exported, serves export zips only, by their bare name, and
+    only to the caller the intent grants.
+  - **Unexported share, as on the MMI:** measured on the car 2026-10-25,
+    "Permission Denial … not exported from uid 1002". The share goes through
+    Shizuku's user service (`GwmRebootService.shareFile`, see
+    [android-shell](../architecture/android-shell.md)).
+  - **Checked on the car:** the device picker opens with the zip.
+  - **iPhones do not receive files over Bluetooth (OPP).** That is what QR
+    CODE is for.
+- **QR CODE.** After an export, QR CODE (beside BLUETOOTH, in the result dialog
+  and the settings sheet) serves that export's three files on the unit's Wi-Fi
+  and shows a code per Wi-Fi address. That is two on the MMI: its own hotspot
+  ("Wi-Fi do carro") and the network it joined ("Outra rede Wi-Fi", told apart
+  by `WifiManager`, hence `ACCESS_WIFI_STATE`). The phone, on the same Wi-Fi,
+  scans it and gets a page with the .zip, .csv and .json.
+  - **The server (`TripExportLink`):** one thread, GET only, behind a 26-letter
+    random token (`TripExport.linkRoute`; anything else is 404). It answers
+    only on `wlan*` / `ap*` addresses, never the car's internal VLANs, and
+    stops after 5 minutes or when the code is closed.
+  - **The code:** drawn with Project Nayuki's encoder as one SVG path
+    (`TripExport.qrSvgPath`).
+  - **Checked on the car 2026-10-25:** an iPhone on the car's Wi-Fi scanned it
+    and downloaded the zip. From the laptop on the hotspot, a wrong token and
+    `../trips.db` got 404, and the port closed once the code was dismissed.
 
 ## Future (optional): refuel log and fuel price
 

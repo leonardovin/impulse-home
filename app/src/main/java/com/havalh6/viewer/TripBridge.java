@@ -125,6 +125,21 @@ final class TripBridge {
         return recorder.sendExportBluetooth(zipName);
     }
 
+    /**
+     * QR CODE: serves an export's files on the unit's Wi-Fi for 5 minutes and
+     * returns the links with their codes (TripRecorder.exportLinkJson).
+     */
+    @JavascriptInterface
+    public String startExportLink(String zipName) {
+        return recorder.exportLinkJson(zipName);
+    }
+
+    /** Closing the code stops the server at once. */
+    @JavascriptInterface
+    public void stopExportLink() {
+        recorder.stopExportLink();
+    }
+
     /** FINALIZAR VIAGEM: ends the open trip; a new one starts at once if the car is still READY. */
     @JavascriptInterface
     public void finishTrip() {

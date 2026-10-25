@@ -23,10 +23,26 @@ import java.util.Locale;
  * has no androidx, so this is the smallest provider that does the job:
  * read-only, not exported, serving only export zips by name, to whoever the
  * intent granted it to.
+ *
+ * <p>The Haval MMI ships that activity unexported (measured on the car,
+ * 2026-10-25: "not exported from uid 1002"), so an app cannot start it. There
+ * the share goes through {@link #shizuku}: the app's Shizuku user service
+ * (GwmRebootService.shareFile) starts it with a file:// stream, as Shizuku's
+ * user.
  */
 public final class TripExportProvider extends ContentProvider {
     private static final String TAG = "H6Trip";
     static final String MIME = "application/zip";
+
+    /** Starts the share as Shizuku's user; set by MainActivity while it lives. */
+    interface ShizukuShare {
+        /** Shizuku is running (its grant is asked for on first use). */
+        boolean available();
+
+        void share(String component, String path);
+    }
+
+    static volatile ShizukuShare shizuku;
 
     static String authority(Context c) {
         return c.getPackageName() + ".tripexport";
@@ -116,11 +132,27 @@ public final class TripExportProvider extends ContentProvider {
         return null;
     }
 
+    /** A Bluetooth share this app can reach: exported, or through Shizuku. */
+    static boolean canSendBluetooth(Context c) {
+        ResolveInfo bt = bluetoothTarget(c);
+        if (bt == null) return false;
+        if (bt.activityInfo.exported) return true;
+        ShizukuShare s = shizuku;
+        return s != null && s.available();
+    }
+
     /** Opens the Bluetooth device picker for the zip; false when there is no Bluetooth share or the file is gone. */
     static boolean sendBluetooth(Context c, String zipName) {
         ResolveInfo bt = bluetoothTarget(c);
         if (bt == null || !TripExport.isZipName(zipName)) return false;
-        if (!new File(new File(PersistBackup.dir(), TripExport.DIR), zipName).isFile()) return false;
+        File zip = new File(new File(PersistBackup.dir(), TripExport.DIR), zipName);
+        if (!zip.isFile()) return false;
+        if (!bt.activityInfo.exported) {
+            ShizukuShare s = shizuku;
+            if (s == null || !s.available()) return false;
+            s.share(bt.activityInfo.packageName + "/" + bt.activityInfo.name, zip.getAbsolutePath());
+            return true;
+        }
         Uri uri = new Uri.Builder().scheme("content").authority(authority(c)).appendPath(zipName).build();
         Intent send = sendIntent()
                 .putExtra(Intent.EXTRA_STREAM, uri)

@@ -345,7 +345,7 @@ final class TripRecorder implements TripEngine.Listener {
             o.put("zip", zip.getName());
             o.put("zipBytes", zip.length());
             // Asked once here, so the page never queries the package manager while it renders.
-            o.put("bluetooth", TripExportProvider.bluetoothTarget(app) != null);
+            o.put("bluetooth", TripExportProvider.canSendBluetooth(app));
             o.put("scope", only == null ? "all" : "selection");
             o.put("trips", n.trips);
             o.put("points", n.points);
@@ -361,6 +361,46 @@ final class TripRecorder implements TripEngine.Listener {
             zipTmp.delete();
             exportJson = exportError("write");
         }
+    }
+
+    /**
+     * QR CODE: serves the export behind {@code zipName} on the unit's Wi-Fi
+     * (TripExportLink) and returns {state: on, ttlMs, links: [{label, url, qr,
+     * size}]}, the code as an SVG path in module units; or {state: error,
+     * reason: missing | no-wifi | failed}.
+     */
+    String exportLinkJson(String zipName) {
+        try {
+            JSONObject o = new JSONObject();
+            java.io.File dir = new java.io.File(PersistBackup.dir(), TripExport.DIR);
+            if (!TripExport.isZipName(zipName) || !new java.io.File(dir, zipName).isFile()) {
+                return exportError("missing");
+            }
+            String stem = zipName.substring(0, zipName.length() - 4);
+            List<TripExportLink.Link> links = TripExportLink.start(app, dir, stem);
+            if (links.isEmpty()) return exportError("no-wifi");
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (TripExportLink.Link l : links) {
+                io.nayuki.qrcodegen.QrCode qr = io.nayuki.qrcodegen.QrCode.encodeText(l.url, io.nayuki.qrcodegen.QrCode.Ecc.MEDIUM);
+                JSONObject j = new JSONObject();
+                j.put("label", l.label);
+                j.put("url", l.url);
+                j.put("qr", TripExport.qrSvgPath(qr));
+                j.put("size", qr.size + 8);
+                arr.put(j);
+            }
+            o.put("state", "on");
+            o.put("ttlMs", TripExportLink.TTL_MS);
+            o.put("links", arr);
+            return o.toString();
+        } catch (Exception e) {
+            Log.w(TAG, "export link failed", e);
+            return exportError("failed");
+        }
+    }
+
+    void stopExportLink() {
+        TripExportLink.stop();
     }
 
     boolean sendExportBluetooth(String zipName) {

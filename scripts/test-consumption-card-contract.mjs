@@ -22,6 +22,8 @@ const SOURCE = {
   recorder: read('app/src/main/java/com/havalh6/viewer/TripRecorder.java'),
   provider: read('app/src/main/java/com/havalh6/viewer/TripExportProvider.java'),
   manifest: read('app/src/main/AndroidManifest.xml'),
+  gwm: read('app/src/main/java/com/havalh6/viewer/GwmRebootService.java'),
+  link: read('app/src/main/java/com/havalh6/viewer/TripExportLink.java'),
 };
 
 function method(text, name) {
@@ -172,7 +174,7 @@ const CHECKS = {
   // The send button appears only where the recorder found a Bluetooth share,
   // and the page never asks the package manager while it renders.
   'bluetooth send only where the head unit has it': ({ html, recorder }) =>
-    /o\.put\("bluetooth", TripExportProvider\.bluetoothTarget\(app\) != null\);/.test(javaMethod(recorder, 'private void runExport(') || '')
+    /o\.put\("bluetooth", TripExportProvider\.canSendBluetooth\(app\)\);/.test(javaMethod(recorder, 'private void runExport(') || '')
     && (method(html, '_energyExportCanSend') || '').includes("st.bluetooth === true")
     && html.includes('<sc-if value="{{ focusedConsumptionExportCanSend }}"')
     && !/bluetoothTarget|sendExportBluetooth/.test(method(html, '_consumptionWidgetView') || ''),
@@ -196,6 +198,22 @@ const CHECKS = {
     return trips.includes('onClick: (ev) => (pick ? this._toggleEnergyTripPick(r.key, r.live, ev) : this._selectEnergyTrip(r.key, ev)),')
       && /if \(live\) return;/.test(toggle) && noCommit(method(html, '_energyExportText'));
   },
+  // The MMI ships the Bluetooth share unexported, so it is started through
+  // Shizuku, as root there: no shell, a share activity and an export zip only.
+  'Shizuku share runs no shell and checks its arguments': ({ gwm }) => {
+    const body = javaMethod(gwm, 'public int shareFile(') || '';
+    return body.includes('!COMPONENT.matcher(component).matches()') && body.includes('!EXPORT_DIR.matcher(parent).matches()')
+      && body.includes('!TripExport.isZipName(zip.getName())') && body.includes('exec(new String[] {')
+      && !/"(sh|\/system\/bin\/sh)"|"-c"/.test(body);
+  },
+  // QR CODE: the server answers only on the unit's Wi-Fi, never the car's internal networks.
+  'export link answers only on Wi-Fi': ({ link }) =>
+    (javaMethod(link, 'private static void serve(') || '').includes('if (!onWifi(conn.getLocalAddress())) continue;')
+    && (javaMethod(link, 'private static List<InetAddress> wifiAddresses(') || '').includes('TripExport.isWifiInterface(ni.getName())'),
+  // Closing the code, or the popup, stops the server at once rather than after 5 minutes.
+  'closing the code stops the link': ({ html }) =>
+    (method(html, '_closeEnergyExportQr') || '').includes('b.stopExportLink()')
+    && html.includes('energyTripPick: null, energyExportDialog: false, energyExportQr: null'),
 };
 
 const MUTANTS = {
@@ -253,6 +271,12 @@ const MUTANTS = {
     '(only == null ? ",\\"totals\\":" + totalsJson()', '("" == null ? "" : ",\\"totals\\":" + totalsJson()') }),
   'selecting ticks saved trips only': (s) => ({ ...s, html: s.html.replace(
     '    if (live) return;\n    this._uiOnlySetState((st) => {', '    this._uiOnlySetState((st) => {') }),
+  'Shizuku share runs no shell and checks its arguments': (s) => ({ ...s, gwm: s.gwm.replace(
+    '                || !TripExport.isZipName(zip.getName()) || !zip.isFile()) return -1;', '                || !zip.isFile()) return -1;') }),
+  'export link answers only on Wi-Fi': (s) => ({ ...s, link: s.link.replace(
+    '                    if (!onWifi(conn.getLocalAddress())) continue;\n', '') }),
+  'closing the code stops the link': (s) => ({ ...s, html: s.html.replace(
+    "    try { if (b && typeof b.stopExportLink === 'function') b.stopExportLink(); } catch (e) {}\n", '') }),
 };
 
 const changed = (a, b) => Object.keys(a).some((k) => a[k] !== b[k]);
