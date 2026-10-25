@@ -617,3 +617,30 @@ with both POWER and RANGE, skipping graph sampling showed no measurable effect: 
 removes work that nothing reads, without a measured gain.
 `test-power-popup-refresh.mjs`, `test-roof-popup-render.mjs` and
 `test-graph-loop-cadence.mjs` check each path, with negative controls.
+
+Measured on the car (WebView 91), parked, with one installed build and the pre-change
+method bodies swapped in at runtime for arm A, so the arms alternate every window
+without a reload (the method-wrapper approach above). 10 s windows, DPR ladder pinned,
+six interleaved pairs per scenario, median of each arm:
+
+| Scenario | Metric | before | after | same sign in every pair |
+|---|---|---|---|---|
+| POWER popup open, the car's own parked bus | root commits/s | 1.45 | **0** | 6/6 |
+| | script time, ms per s | 581 | **502** | 6/6 |
+| POWER popup open, plus power traffic at driving rates | root commits/s | 3.88 | **0** | 6/6 |
+| | share of wall clock in commits | 27.5% | **0%** | 6/6 |
+| | fps | 14.7 | **17.3** | 6/6 |
+| | `timerLagP90` | 32.5 ms | **25.1 ms** | 6/6 |
+| | main-thread task time, ms per s | 721 | **582** | 6/6 |
+| Roof popup open, camera still | rendered fps | 26.0 | **0** (idle) | 6/6 |
+| | main-thread task time, ms per s | 518 | **314** | 6/6 |
+| | `timerLagP90` | 20.8 ms | **7.9 ms** | 6/6 |
+| RANGE-only board, camera still | widget loop calls/s | 60.1 | **0** | 6/6 |
+| | main-thread task time, ms per s | 235 | **204** | 5 of 6 |
+
+**The camera orbit hides two of these.** With `camOrbitEnabled` on, the scene renders
+every frame anyway and `_applyGraphLoopGate` holds the widget loop while the camera
+moves. So with the orbit on, the roof and RANGE changes measured no difference
+(both arms about 26-28 fps, widget loop 0 in both). "Camera still" holds
+`_syncCamOrbit` off for the run only. The POWER popup result does not depend on it:
+it was measured with the orbit on.
