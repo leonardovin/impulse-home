@@ -2,7 +2,8 @@
 // samples the graph series only while a graph canvas is mounted: nothing else
 // reads the series. Power cards keep their 100 ms paint either way. Sampling
 // stays per-frame under a canvas, since _graphSmooth's EMA and the 40 ms sample
-// bucket are tuned to the frame loop.
+// bucket are tuned to the frame loop. Sampling pauses while no canvas is up, so
+// the series restarts when one comes back instead of bridging the gap.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -31,6 +32,26 @@ function rig(ctx,{canvases=[],item=null,lean=true}={}){
  app._graphDeriveConsumption=function(now){h.derive++;return P._graphDeriveConsumption.call(this,now)};
  for(let i=0;i<FRAMES;i++)app._drawGraphs(T0+i*DT);
  return h;
+}
+// present -> absent -> present on one app: the same loop, the canvas set swapped between phases.
+function absence(ctx){
+ const P=ctx.App.prototype,app=Object.create(P);let canvases=[canvas(0)];
+ Object.assign(app,{_powerLean:true,_powerCardPaintAt:0,_graphCanvasCacheAt:0,_graphDrawAt:0,
+  _graphAnyLive:true,_graphLiveKeys:{evPowerKw:true,fuelInst:true},_graphValues:{evPowerKw:24,fuelInst:15},
+  _graphDisplay:{},_graphSeries:{},_graphEvInstEma:null,_powerLive:{},_carSpeedKmh:60});
+ app._updatePowerCards=()=>{};app._widgetNodes=()=>canvases;
+ app._graphActiveItem=()=>({type:'graphs',w:2,h:1,graph:{cols:1,rows:1,panes:[{kind:'series',vars:['evPowerKw'],graphStyle:'line'}]}});
+ app._paintGraphCanvas=()=>{};
+ const run=(from,n)=>{for(let i=0;i<n;i++)app._drawGraphs(from+i*DT)};
+ run(T0,60);
+ const before=app._graphSeries.evPowerKw.slice();
+ // Off the graph desktop for 2 s (the canvas cache refreshes every 500 ms), the bus moves on.
+ canvases=[];app._graphValues.evPowerKw=-8;
+ run(T0+1500,60);
+ const during=app._graphSeries.evPowerKw.slice();
+ const RESUME=T0+3000;canvases=[canvas(0)];
+ run(RESUME,40);
+ return {before,during,after:app._graphSeries.evPowerKw,resume:RESUME,display:app._graphDisplay.evPowerKw};
 }
 const gaps=(ts)=>ts.slice(1).map((t,i)=>t-ts[i]);
 const canvas=(pane)=>({getAttribute:(name)=>name==='data-pane'?String(pane):null});
@@ -86,6 +107,14 @@ function check(html){
  assert.equal(wants(['range','power']),true);
  assert.equal(wants(['power'],{loading:true}),false,'not while loading');
  assert.equal(wants(['graphs'],{appsOnly:true}),false,'not on the apps-only board');
+ // --- (d) back from an absence: the series restarts, nothing is drawn across the gap ---
+ const a=absence(ctx);
+assert.ok(a.before.length>10&&a.before.every((p)=>p.v===24),'the first presence sampled the bus');
+ assert.deepEqual(a.during,a.before,'no sampling while absent: the old samples just sit there');
+ assert.ok(a.after.length>10,'sampling resumed');
+ assert.ok(a.after.every((p)=>p.t>=a.resume),'no sample from before the absence survives, so no segment spans the gap');
+ assert.equal(a.after[0].v,-8,'the first new sample is the raw value, not an EMA step from the stale display');
+ assert.equal(a.display,-8);
 }
 // The mutation must apply, otherwise a "control" would only prove the source did not change.
 const mutate=(from,to,html=source)=>{assert.equal(html.split(from).length,2,'control anchor not found once: '+from.slice(0,60));return html.replace(from,()=>to)};
@@ -96,5 +125,8 @@ assert.throws(()=>check(mutate('  _drawGraphs(now) {\n','  _drawGraphs(now) {\n'
 assert.throws(()=>check(mutate('      this._powerCardPaintAt = now;\n      this._updatePowerCards(now);\n','      this._powerCardPaintAt = now;\n')),'power paint dropped');
 assert.throws(()=>check(mutate('now - this._powerCardPaintAt >= POWER_CARD_PAINT_MS','true')),'power paint unthrottled');
 assert.throws(()=>check(mutate(SAMPLE,'')),'sampling deleted');
+assert.throws(()=>check(mutate('    if (this._graphSeriesGap) {\n      this._graphSeriesGap = false;\n      this._graphSeries = {};\n      this._graphDisplay = {};\n    }\n','')),'series not restarted after an absence');
+assert.throws(()=>check(mutate('      this._graphSeries = {};\n      this._graphDisplay = {};\n','      this._graphSeries = {};\n')),'smoothed display kept across the gap');
+assert.throws(()=>check(mutate('      this._graphSeriesGap = true;\n','')),'absence never recorded');
 assert.throws(()=>check(mutate('    if (this._graphDrawAt && now - this._graphDrawAt < minDt) return;\n','')),'minDt paint throttle dropped');
 console.log('PASS graph loop cadence: power paints every 100 ms, series sampled per frame only under a canvas, range off the gate + negative controls');

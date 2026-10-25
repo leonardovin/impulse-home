@@ -14055,7 +14055,19 @@ class Component extends DCLogic {
       this._graphCanvasCacheAt = now;
     }
     const canvases = this._graphCanvasCache;
-    if (!canvases || !canvases.length) return;
+    if (!canvases || !canvases.length) {
+      this._graphSeriesGap = true;
+      return;
+    }
+    // Sampling stops while no canvas is mounted, so the series keeps its old
+    // samples and the painters would join them to the new ones with a straight
+    // line across the gap: a trend that never happened. Restart the series (and
+    // the smoothed display, so the first new sample is the raw value) instead.
+    if (this._graphSeriesGap) {
+      this._graphSeriesGap = false;
+      this._graphSeries = {};
+      this._graphDisplay = {};
+    }
     // Only a graph canvas reads the series. While one is mounted, sample every
     // frame (the EMA and the 40 ms bucket are tuned to it); paint stays cheaper.
     this._graphDeriveConsumption(now);
