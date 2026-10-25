@@ -222,6 +222,24 @@ explains it. Measure the specific change; do not reason from this table.
   coalescing, the stage-only path, the slide drop, unmount and the dock sync,
   with negative controls.
 
+  The same traffic on an emulator with a navigation widget placed: Android 16 and
+  WebView 133, 4 vCPU and 4 GB at 1920x720, the emulator process held on the host's
+  efficiency cores, and the DPR ladder pinned. Debug APKs, a warm-up run discarded,
+  then A/B/A/B:
+
+  | | before | after |
+  |---|---|---|
+  | root commits/s | 4.8 / 5.1 | **0.6 / 0.4** |
+  | share of wall clock in commits | 21.3% / 19.0% | **2.8% / 1.5%** |
+  | fps | 41.4 / 48.3 | 46.3 / 50.2 |
+  | `timerLagP90` | 40.6 / 33.8 ms | 23.9 / 18.7 ms |
+  | signals the page kept up with in 10 s | 346 / 376 | 411 / 468 |
+
+  The injector runs on the page's main thread, so the busier arm received fewer
+  signals and still committed more. The Android 9 emulator image (WebView 66)
+  cannot run the viewer at all (`String.prototype.matchAll` needs Chrome 73), so it
+  could not be used.
+
 - **A hidden WebView is still on the panel, and its render loop is dead.** The
   loop is driven only by `requestAnimationFrame`. When another app takes window
   focus — a freeform app in a launcher slot, the OEM scene manager — Android
