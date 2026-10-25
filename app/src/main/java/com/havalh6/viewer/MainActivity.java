@@ -233,6 +233,13 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> pendingFiles;
     private final ConcurrentHashMap<String, String> telemetryCache = new ConcurrentHashMap<>();
+    private final TelemetryBatch telemetryBatch = new TelemetryBatch();
+    private boolean telemetryFlushPosted;
+    private final Runnable telemetryFlush = () -> {
+        telemetryFlushPosted = false;
+        String script = telemetryBatch.drain();
+        if (script != null && webView != null) webView.evaluateJavascript(script, null);
+    };
     private View launchAnchor;
     private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     /** Bing wallpaper JSON. One thread, so a refresh cannot pile onto the WebView. */
@@ -292,11 +299,20 @@ public final class MainActivity extends Activity {
 
             telemetryCache.put(key, value);
             if (webView != null) {
-                webView.post(() -> webView.evaluateJavascript(
-                        String.format("if(window.onCarDataUpdate){window.onCarDataUpdate('%s','%s');}",
-                                key.replace("'", "\\'"), value.replace("'", "\\'")),
-                        null
-                ));
+                // One evaluateJavascript per broadcast was one UI-thread message, one
+                // renderer IPC, one V8 compile (every string differs) and one renderer
+                // task per signal. Signals now join a batch flushed once per looper
+                // turn: no timer, so no added latency, and broadcasts already queued
+                // behind the first one ride along. Order and repeated values are kept.
+                // Nuance: a signal that arrives after some other posted push X, but
+                // before this flush runs, now reaches the page before X.
+                // mainHandler rather than webView.post: same FIFO queue while attached,
+                // and a detached view's run queue cannot strand the flag.
+                telemetryBatch.add(key, value);
+                if (!telemetryFlushPosted) {
+                    telemetryFlushPosted = true;
+                    mainHandler.post(telemetryFlush);
+                }
             }
         }
     };

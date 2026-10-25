@@ -215,9 +215,20 @@ CAN bus → Shizuku IPC
   → havalshisuku ServiceManager.dispatchTelemetryOnly(key, value)
   → public broadcast {key, value}
   → MainActivity.telemetryReceiver  (registered in onCreate, held across pause)
+  → TelemetryBatch  (one evaluateJavascript per main-looper turn)
   → window.onCarDataUpdate(key, value)
   → carTelemetry  →  Component._applyCarSignal
 ```
+
+The receiver does not call `evaluateJavascript` per broadcast. Each call was its own
+UI-thread message, renderer IPC, V8 compile (no two scripts are equal) and renderer
+task. Broadcasts append to `TelemetryBatch` in arrival order, every value kept (an
+edge on a repeated key must not be lost), and one flush posted on the first signal
+of a batch sends them as a single script. There is no timer, so no latency is added;
+broadcasts already queued behind the first join it. `TelemetryBatch` also escapes
+backslashes and line terminators: the old `'%s'` formatting escaped only `'`, so such
+a value produced broken JavaScript and the signal was dropped. `TelemetryBatchTest`
+covers order, repeats, draining and escaping.
 
 Two broadcast actions are accepted, because the havalshisuku source trees differ
 on which one they send and both carry identical `key`/`value` string extras:
