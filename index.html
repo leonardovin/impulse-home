@@ -26168,7 +26168,8 @@ class Component extends DCLogic {
       }
       el.classList.toggle('act', active);
     });
-    if (this._hsRoofPopOpen && this.requestRender) this.requestRender(2);
+    // The roof popup is fixed DOM; opening, camera and layout changes request
+    // their own frames. Do not keep the 3D scene rendering while it is open.
   }
 
   // ── X-ray wheel-floor glows ───────────────────────────────────────────────
