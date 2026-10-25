@@ -191,6 +191,37 @@ explains it. Measure the specific change; do not reason from this table.
   the threshold is the bug, not the fix. Check whether `renderVals` already
   reads a live mirror — twice now, it did.
 
+  **A setState callback is a root commit too.** Two bus paths still committed
+  the root on every frame. `_refreshTireTelemetry` ran a plain `setState` per
+  `tpms_status` or tyre-warning frame, and `_commitNavUi` passed
+  `_syncDockIndicators` as a callback with each guidance update (about 1 Hz).
+  `_uiOnlySetState` sends any update that has a callback to the root path. The
+  callback was redundant: both the root's and the desktop stage's
+  `componentDidUpdate` already sync the dock. Both paths now go through
+  `_uiOnlySetState` with no callback, so they repaint only the desktop stage, are
+  dropped during a slide (teardown refreshes), and fall back to the root only
+  while a popup or editor is open. Tyre frames also coalesce into one trailing
+  refresh 250 ms later, because `tpms_status` and its warning keys arrive
+  together. Nothing in the 3D scene reads tyre data.
+
+  Measured in headless Chrome, not on the car, with interleaved A/B/A/B arms at
+  4x CPU throttle and simulated traffic of 60 signals/s:
+
+  | | before | after |
+  |---|---|---|
+  | root commits/s, mixed bus incl. `tpms_status` | 4.78 / 4.78 | **0.30 / 0.30** |
+  | script time per 10 s window | 1.12 / 0.82 s | 0.83 / 0.57 s |
+  | root commits/s from guidance, navigation widget placed | 0.9 / 0.9 | **0** |
+
+  The 0.30 that remains is start-up `lights`/`splashActive` commits, present in
+  both arms. The simulated tyre value changed on every frame, which is harsher
+  than a real tyre. The real `tpms_status` rate while driving has not been
+  measured, so the effect on the car's frame rate is unknown. What the table
+  does establish is the count: one ~197 ms root commit per tyre frame, and one
+  per second of guidance, are gone. `test-bus-widget-refresh.mjs` checks the
+  coalescing, the stage-only path, the slide drop, unmount and the dock sync,
+  with negative controls.
+
 - **A hidden WebView is still on the panel, and its render loop is dead.** The
   loop is driven only by `requestAnimationFrame`. When another app takes window
   focus — a freeform app in a launcher slot, the OEM scene manager — Android
